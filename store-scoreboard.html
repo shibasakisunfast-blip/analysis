@@ -1643,12 +1643,37 @@ function renderPeriodAnalysis(){
   $('#periodCategoryCompareHead').innerHTML = '<th>カテゴリー</th>' +
     activeStores.map(store => `<th class="num"><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[store]}"></span>${store}</span></th>`).join('');
 
+  const BRAND_BUCKETS = ['LI-NING', 'YONEX', 'SUNFAST', 'その他'];
+  function getBrandBucket(catObj, bucketName){
+    const brands = (catObj && catObj.brands) || {};
+    if(bucketName === 'その他'){
+      let qty = 0, amount = 0;
+      Object.entries(brands).forEach(([b,v]) => {
+        if(b !== 'LI-NING' && b !== 'YONEX' && b !== 'SUNFAST'){ qty += v.qty; amount += v.amount; }
+      });
+      return {qty, amount};
+    }
+    return brands[bucketName] || {qty:0, amount:0};
+  }
+
+  const showBrandBreakdown = activeStores.length > 1;
+
   $('#periodCategoryCompareBody').innerHTML = CATEGORY_DEFS.map(def => {
     const cells = catsByStore.map(({cats}) => {
       const c = cats[def.key] || {qty:0, amount:0};
       return `<td class="num">¥${yen(c.amount)}<br><span style="color:var(--grey); font-size:11px;">${fmt(c.qty)}${def.unit}</span></td>`;
     }).join('');
-    return `<tr><td>${def.label}</td>${cells}</tr>`;
+    let rowsHTML = `<tr><td>${def.label}</td>${cells}</tr>`;
+    if(def.hasBrands && showBrandBreakdown){
+      rowsHTML += BRAND_BUCKETS.map(brand => {
+        const brandCells = catsByStore.map(({cats}) => {
+          const b = getBrandBucket(cats[def.key], brand);
+          return `<td class="num" style="color:var(--grey); font-size:12px;">¥${yen(b.amount)}<br><span style="font-size:10.5px;">${fmt(b.qty)}${def.unit}</span></td>`;
+        }).join('');
+        return `<tr><td style="padding-left:24px; color:var(--grey); font-size:12.5px;">${brand}</td>${brandCells}</tr>`;
+      }).join('');
+    }
+    return rowsHTML;
   }).join('');
 
   safeChart('periodCategoryCompare', 'chartPeriodCategoryCompare', {
