@@ -456,7 +456,32 @@
       <div class="chart-card wide"><h3>店舗別 売上推移</h3><div class="chart-wrap"><canvas id="chartCompareTrend"></canvas></div></div>
     </div>
 
-    <div class="section-title"><span class="num">07</span> 取込データの管理</div>
+    <div class="section-title"><span class="num">07</span> 期間分析</div>
+    <div class="table-card">
+      <div class="compare-controls">
+        <span class="kpi-label" style="margin:0;">期間</span>
+        <select id="periodStartSelect" class="select-input"></select>
+        <span style="color:var(--grey);">〜</span>
+        <select id="periodEndSelect" class="select-input"></select>
+        <span class="kpi-label" style="margin:0 0 0 14px;">店舗（複数選択可）</span>
+        <div id="periodStoreCheckboxes" style="display:flex; gap:12px; flex-wrap:wrap;"></div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>店舗</th><th class="num">対象月数</th><th class="num">来客数合計</th><th class="num">客単価</th><th class="num">売上合計</th><th class="num">粗利合計</th><th class="num">粗利率</th></tr>
+        </thead>
+        <tbody id="periodCompareBody"></tbody>
+      </table>
+      <p class="status-line" id="periodEmptyNote" style="display:none;">選択した期間・店舗のデータがありません。</p>
+    </div>
+    <div class="chart-card wide" style="margin-top:16px;"><h3 style="font-family:'Oswald',sans-serif; font-size:14px; text-transform:uppercase; margin:0 0 10px;">期間中の売上推移</h3><div class="chart-wrap" style="height:260px;"><canvas id="chartPeriodTrend"></canvas></div></div>
+
+    <div id="periodSingleStoreArea" style="display:none;">
+      <div class="section-title"><span id="periodCategoryTitle">期間のカテゴリー別スコア</span></div>
+      <div class="kpi-grid" id="periodCategoryGrid"></div>
+    </div>
+
+    <div class="section-title"><span class="num">08</span> 取込データの管理</div>
     <div class="table-card">
       <div id="manageList"></div>
       <div class="footer-actions">
@@ -767,21 +792,24 @@ function computeBrandSummary(items){
 
 async function loadAllRecords(){
   const data = await apiGetAll();
+  const asText = (v) => (v === null || v === undefined) ? '' : String(v);
   const itemsByKey = {};
   (data.items || []).forEach(it => {
-    const key = it.store + '::' + it.yearMonth;
+    const store = asText(it.store), yearMonth = asText(it.yearMonth);
+    const key = store + '::' + yearMonth;
     if(!itemsByKey[key]) itemsByKey[key] = [];
     itemsByKey[key].push({
-      code: it.code, name: it.name, brand: it.brand, jan: it.jan,
+      code: asText(it.code), name: asText(it.name), brand: asText(it.brand), jan: asText(it.jan),
       qty: Number(it.qty) || 0, amount: Number(it.amount) || 0,
-      categoryName: it.categoryName || ''
+      categoryName: asText(it.categoryName)
     });
   });
   return (data.summaries || []).map(s => {
-    const key = s.store + '::' + s.yearMonth;
+    const store = asText(s.store), yearMonth = asText(s.yearMonth);
+    const key = store + '::' + yearMonth;
     const items = itemsByKey[key] || [];
     return {
-      id: s.id, store: s.store, yearMonth: s.yearMonth, importedAt: s.importedAt,
+      id: asText(s.id), store, yearMonth, importedAt: asText(s.importedAt),
       nhb: {
         visitors: Number(s.visitors) || 0, soldQty: Number(s.soldQty) || 0, salesAmount: Number(s.salesAmount) || 0,
         grossProfit: Number(s.grossProfit) || 0, grossMargin: Number(s.grossMargin) || 0,
@@ -1031,6 +1059,7 @@ async function loadAndRender(focusStore, focusMonth){
   }
 
   renderComparison();
+  renderPeriodAnalysis();
   renderManageList();
 }
 
@@ -1156,23 +1185,9 @@ function computeCategoryScore(items){
   return cats;
 }
 
-function renderCategoryScore(){
-  const cur = getRecord(selectedStore, selectedMonth);
-  const prev = getYoYRecord(selectedStore, selectedMonth);
-  $('#categoryScoreTitle').textContent = `${selectedStore}｜${selectedMonth} のカテゴリー別スコア（昨対比）`;
-
-  const hasItems = (cur.items || []).length > 0;
-  $('#categoryScoreNote').style.display = hasItems ? 'none' : 'block';
-  if(!hasItems){
-    $('#categoryScoreGrid').innerHTML = '';
-    return;
-  }
-
-  const curCats = computeCategoryScore(cur.items);
-  const prevCats = prev ? computeCategoryScore(prev.items) : null;
-
-  $('#categoryScoreGrid').innerHTML = CATEGORY_DEFS.map(def => {
-    const c = curCats[def.key];
+function renderCategoryCardsInto(containerId, curCats, prevCats){
+  $(containerId).innerHTML = CATEGORY_DEFS.map(def => {
+    const c = curCats[def.key] || {qty:0, amount:0, brands:{}};
     const p = prevCats ? prevCats[def.key] : null;
     let brandsHTML = '';
     if(def.hasBrands){
@@ -1196,6 +1211,23 @@ function renderCategoryScore(){
       </div>
     `;
   }).join('');
+}
+
+function renderCategoryScore(){
+  const cur = getRecord(selectedStore, selectedMonth);
+  const prev = getYoYRecord(selectedStore, selectedMonth);
+  $('#categoryScoreTitle').textContent = `${selectedStore}｜${selectedMonth} のカテゴリー別スコア（昨対比）`;
+
+  const hasItems = (cur.items || []).length > 0;
+  $('#categoryScoreNote').style.display = hasItems ? 'none' : 'block';
+  if(!hasItems){
+    $('#categoryScoreGrid').innerHTML = '';
+    return;
+  }
+
+  const curCats = computeCategoryScore(cur.items);
+  const prevCats = prev ? computeCategoryScore(prev.items) : null;
+  renderCategoryCardsInto('#categoryScoreGrid', curCats, prevCats);
 }
 
 function renderKPIs(){
@@ -1478,6 +1510,130 @@ function renderComparisonBody(){
     data:{ labels: trendLabels, datasets: trendDatasets },
     options: baseLineOptions()
   });
+}
+
+/* ---------- Period analysis (date-range, single or multi store) ---------- */
+let periodStart = null;
+let periodEnd = null;
+let periodControlsInitialized = false;
+
+function computePeriodTotals(store, startYm, endYm){
+  const recs = recordsForStore(store).filter(r => r.yearMonth >= startYm && r.yearMonth <= endYm);
+  const totals = {monthsCount: recs.length, visitors:0, soldQty:0, salesAmount:0, grossProfit:0, purchaseAmount:0, records: recs};
+  recs.forEach(r => {
+    totals.visitors += r.nhb.visitors;
+    totals.soldQty += r.nhb.soldQty;
+    totals.salesAmount += r.nhb.salesAmount;
+    totals.grossProfit += r.nhb.grossProfit;
+    totals.purchaseAmount += r.nhb.purchaseAmount;
+  });
+  totals.avgTicket = totals.visitors ? totals.salesAmount / totals.visitors : 0;
+  totals.grossMargin = totals.salesAmount ? (totals.grossProfit / totals.salesAmount * 100) : 0;
+  return totals;
+}
+
+function computePeriodCategoryScore(store, startYm, endYm){
+  const recs = recordsForStore(store).filter(r => r.yearMonth >= startYm && r.yearMonth <= endYm);
+  const merged = {};
+  CATEGORY_DEFS.forEach(d => { merged[d.key] = {qty:0, amount:0, brands:{}}; });
+  recs.forEach(r => {
+    const cats = computeCategoryScore(r.items);
+    Object.entries(cats).forEach(([k,v]) => {
+      merged[k].qty += v.qty;
+      merged[k].amount += v.amount;
+      Object.entries(v.brands).forEach(([b,bv]) => {
+        if(!merged[k].brands[b]) merged[k].brands[b] = {qty:0, amount:0};
+        merged[k].brands[b].qty += bv.qty;
+        merged[k].brands[b].amount += bv.amount;
+      });
+    });
+  });
+  return merged;
+}
+
+function initPeriodControlsIfNeeded(){
+  if(periodControlsInitialized) return;
+  const wrap = $('#periodStoreCheckboxes');
+  wrap.innerHTML = STORES.map(store => `
+    <label style="display:inline-flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
+      <input type="checkbox" value="${store}" class="period-store-cb">
+      <span class="dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${STORE_COLORS[store]};"></span>${store}
+    </label>
+  `).join('');
+  wrap.querySelectorAll('.period-store-cb').forEach(cb => cb.value === selectedStore && (cb.checked = true));
+  wrap.addEventListener('change', renderPeriodAnalysis);
+  $('#periodStartSelect').addEventListener('change', () => {
+    periodStart = $('#periodStartSelect').value;
+    renderPeriodAnalysis();
+  });
+  $('#periodEndSelect').addEventListener('change', () => {
+    periodEnd = $('#periodEndSelect').value;
+    renderPeriodAnalysis();
+  });
+  periodControlsInitialized = true;
+}
+
+function renderPeriodAnalysis(){
+  const months = allYearMonths().slice().sort((a,b)=> a.localeCompare(b)); // asc
+  if(months.length === 0) return;
+  initPeriodControlsIfNeeded();
+
+  const startSel = $('#periodStartSelect'), endSel = $('#periodEndSelect');
+  const prevStart = periodStart, prevEnd = periodEnd;
+  startSel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
+  endSel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
+  periodStart = (prevStart && months.includes(prevStart)) ? prevStart : months[0];
+  periodEnd = (prevEnd && months.includes(prevEnd)) ? prevEnd : months[months.length-1];
+  if(periodStart > periodEnd) periodEnd = periodStart;
+  startSel.value = periodStart;
+  endSel.value = periodEnd;
+
+  const checkedStores = Array.from(document.querySelectorAll('.period-store-cb:checked')).map(cb => cb.value);
+  const storesToShow = checkedStores.length ? checkedStores : [selectedStore];
+
+  const rows = storesToShow.map(store => ({store, totals: computePeriodTotals(store, periodStart, periodEnd)}))
+    .filter(r => r.totals.monthsCount > 0);
+
+  $('#periodEmptyNote').style.display = rows.length ? 'none' : 'block';
+
+  $('#periodCompareBody').innerHTML = rows.map(r => `
+    <tr>
+      <td><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[r.store]}"></span>${r.store}</span></td>
+      <td class="num">${r.totals.monthsCount}か月</td>
+      <td class="num">${fmt(r.totals.visitors)}人</td>
+      <td class="num">¥${yen(r.totals.avgTicket)}</td>
+      <td class="num">¥${yen(r.totals.salesAmount)}</td>
+      <td class="num">¥${yen(r.totals.grossProfit)}</td>
+      <td class="num">${fmt(r.totals.grossMargin,1)}%</td>
+    </tr>
+  `).join('');
+
+  const trendLabels = [];
+  for(const m of months){ if(m >= periodStart && m <= periodEnd) trendLabels.push(m); }
+  const trendDatasets = storesToShow.map(store => ({
+    label: store,
+    data: trendLabels.map(ym => { const r = getRecord(store, ym); return r ? r.nhb.salesAmount : null; }),
+    borderColor: STORE_COLORS[store],
+    backgroundColor: STORE_COLORS[store],
+    spanGaps: true,
+    tension:.3,
+    fill:false
+  }));
+  safeChart('periodTrend', 'chartPeriodTrend', {
+    type:'line',
+    data:{ labels: trendLabels, datasets: trendDatasets },
+    options: baseLineOptions()
+  });
+
+  if(storesToShow.length === 1){
+    const store = storesToShow[0];
+    $('#periodSingleStoreArea').style.display = 'block';
+    $('#periodCategoryTitle').textContent = `${store}｜${periodStart}〜${periodEnd} のカテゴリー別スコア合計`;
+    const cats = computePeriodCategoryScore(store, periodStart, periodEnd);
+    renderCategoryCardsInto('#periodCategoryGrid', cats, null);
+  } else {
+    $('#periodSingleStoreArea').style.display = 'none';
+  }
 }
 
 /* ---------- Manage list ---------- */
