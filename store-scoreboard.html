@@ -476,8 +476,18 @@
     </div>
     <div class="chart-card wide" style="margin-top:16px;"><h3 style="font-family:'Oswald',sans-serif; font-size:14px; text-transform:uppercase; margin:0 0 10px;">期間中の売上推移</h3><div class="chart-wrap" style="height:260px;"><canvas id="chartPeriodTrend"></canvas></div></div>
 
+    <div class="section-title"><span id="periodCategoryCompareTitle">期間のカテゴリー別比較</span></div>
+    <div class="table-card">
+      <table>
+        <thead><tr id="periodCategoryCompareHead"></tr></thead>
+        <tbody id="periodCategoryCompareBody"></tbody>
+      </table>
+      <p class="status-line">金額（数量）で表示しています。</p>
+    </div>
+    <div class="chart-card wide" style="margin-top:14px;"><h3 style="font-family:'Oswald',sans-serif; font-size:14px; text-transform:uppercase; margin:0 0 10px;">カテゴリー別 売上比較</h3><div class="chart-wrap" style="height:260px;"><canvas id="chartPeriodCategoryCompare"></canvas></div></div>
+
     <div id="periodSingleStoreArea" style="display:none;">
-      <div class="section-title"><span id="periodCategoryTitle">期間のカテゴリー別スコア</span></div>
+      <div class="section-title"><span id="periodCategoryTitle">期間のカテゴリー別スコア（ブランド別内訳）</span></div>
       <div class="kpi-grid" id="periodCategoryGrid"></div>
     </div>
 
@@ -1625,10 +1635,47 @@ function renderPeriodAnalysis(){
     options: baseLineOptions()
   });
 
+  // Category comparison across whichever stores have data in this period.
+  const activeStores = rows.map(r => r.store);
+  $('#periodCategoryCompareTitle').textContent = `${periodStart}〜${periodEnd} のカテゴリー別比較`;
+  const catsByStore = activeStores.map(store => ({store, cats: computePeriodCategoryScore(store, periodStart, periodEnd)}));
+
+  $('#periodCategoryCompareHead').innerHTML = '<th>カテゴリー</th>' +
+    activeStores.map(store => `<th class="num"><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[store]}"></span>${store}</span></th>`).join('');
+
+  $('#periodCategoryCompareBody').innerHTML = CATEGORY_DEFS.map(def => {
+    const cells = catsByStore.map(({cats}) => {
+      const c = cats[def.key] || {qty:0, amount:0};
+      return `<td class="num">¥${yen(c.amount)}<br><span style="color:var(--grey); font-size:11px;">${fmt(c.qty)}${def.unit}</span></td>`;
+    }).join('');
+    return `<tr><td>${def.label}</td>${cells}</tr>`;
+  }).join('');
+
+  safeChart('periodCategoryCompare', 'chartPeriodCategoryCompare', {
+    type:'bar',
+    data:{
+      labels: CATEGORY_DEFS.map(d => d.label),
+      datasets: catsByStore.map(({store, cats}) => ({
+        label: store,
+        data: CATEGORY_DEFS.map(d => (cats[d.key] ? cats[d.key].amount : 0)),
+        backgroundColor: STORE_COLORS[store],
+        borderRadius:4
+      }))
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Inter', size:11} } } },
+      scales:{
+        x:{ grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
+        y:{ grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} }
+      }
+    }
+  });
+
   if(storesToShow.length === 1){
     const store = storesToShow[0];
     $('#periodSingleStoreArea').style.display = 'block';
-    $('#periodCategoryTitle').textContent = `${store}｜${periodStart}〜${periodEnd} のカテゴリー別スコア合計`;
+    $('#periodCategoryTitle').textContent = `${store}｜${periodStart}〜${periodEnd} のカテゴリー別スコア（ブランド別内訳）`;
     const cats = computePeriodCategoryScore(store, periodStart, periodEnd);
     renderCategoryCardsInto('#periodCategoryGrid', cats, null);
   } else {
