@@ -1666,8 +1666,13 @@ function renderPeriodAnalysis(){
     let rowsHTML = `<tr><td>${def.label}</td>${cells}</tr>`;
     if(def.hasBrands && showBrandBreakdown){
       rowsHTML += BRAND_BUCKETS.map(brand => {
-        const brandCells = catsByStore.map(({cats}) => {
-          const b = getBrandBucket(cats[def.key], brand);
+        const bucketValues = catsByStore.map(({cats}) => getBrandBucket(cats[def.key], brand));
+        const hasAny = bucketValues.some(b => b.amount || b.qty);
+        if(!hasAny) return '';
+        const brandCells = bucketValues.map(b => {
+          if(!b.amount && !b.qty){
+            return `<td class="num" style="color:var(--line);">–</td>`;
+          }
           return `<td class="num" style="color:var(--grey); font-size:12px;">¥${yen(b.amount)}<br><span style="font-size:10.5px;">${fmt(b.qty)}${def.unit}</span></td>`;
         }).join('');
         return `<tr><td style="padding-left:24px; color:var(--grey); font-size:12.5px;">${brand}</td>${brandCells}</tr>`;
