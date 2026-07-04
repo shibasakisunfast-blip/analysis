@@ -471,6 +471,12 @@
 
 <div class="toast" id="toast"></div>
 
+<iframe name="hiddenPostFrame" style="display:none;" title="background-submit"></iframe>
+<form id="hiddenPostForm" method="POST" target="hiddenPostFrame" style="display:none;">
+  <input type="hidden" name="action" id="hiddenPostAction">
+  <input type="hidden" name="payload" id="hiddenPostPayload">
+</form>
+
 <script>
 /* =========================================================
    店舗成績スコアボード（複数店舗対応）
@@ -653,61 +659,98 @@ $('#btnSetupConnect').addEventListener('click', async () => {
   }
 });
 
-async function gasFetch(url, options){
-  let res;
-  try{
-    res = await fetch(url, options);
-  }catch(networkErr){
-    console.error('fetch failed:', networkErr);
-    if(location.protocol === 'file:'){
-      throw new Error('このページをファイルとして直接開いている（file://）ため、通信がブロックされています。GitHub Pagesなど https:// で配信される場所に置いてから開いてください。');
+/* JSONP for reads: <script src> loads are never subject to CORS. */
+function jsonpRequest(url, params){
+  return new Promise((resolve, reject) => {
+    const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+    const script = document.createElement('script');
+    let settled = false;
+
+    function cleanup(){
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+      clearTimeout(timer);
     }
-    throw new Error('サーバーに接続できませんでした（ネットワークまたはCORSの問題の可能性があります）。URLが正しいか、Apps Scriptのデプロイ設定（アクセスできるユーザー：全員）を確認してください。');
-  }
-  let text;
+    window[cbName] = (data) => {
+      if(settled) return;
+      settled = true;
+      cleanup();
+      resolve(data);
+    };
+    const timer = setTimeout(() => {
+      if(settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('サーバーからの応答がタイムアウトしました。URLとApps Scriptのデプロイ設定（アクセスできるユーザー：全員）を確認してください。'));
+    }, 20000);
+
+    const qs = Object.assign({}, params, {callback: cbName});
+    const query = Object.keys(qs).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(qs[k])).join('&');
+    script.src = url + (url.includes('?') ? '&' : '?') + query;
+    script.onerror = () => {
+      if(settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('サーバーに接続できませんでした。URLが正しいかご確認ください。'));
+    };
+    document.body.appendChild(script);
+  });
+}
+
+/* Hidden form + postMessage for writes: real form navigations are exempt from CORS,
+   and the GAS response posts its JSON result back to this window via postMessage. */
+const pendingFormRequests = [];
+window.addEventListener('message', (event) => {
+  if(pendingFormRequests.length === 0) return;
+  const entry = pendingFormRequests.shift();
   try{
-    text = await res.text();
-  }catch(readErr){
-    throw new Error('サーバーからの応答を読み取れませんでした。');
+    entry.resolve(JSON.parse(event.data));
+  }catch(err){
+    entry.reject(new Error('サーバーからの応答を解析できませんでした。'));
   }
-  if(!res.ok){
-    throw new Error('サーバーがエラーを返しました（HTTP ' + res.status + '）。' + text.slice(0,200));
-  }
-  let json;
-  try{
-    json = JSON.parse(text);
-  }catch(parseErr){
-    console.error('non-JSON response:', text.slice(0,500));
-    throw new Error('サーバーからの応答がJSON形式ではありませんでした。Apps Scriptの認証が完了していない、またはデプロイのアクセス設定が「全員」になっていない可能性があります。');
-  }
-  return json;
+});
+
+function submitViaHiddenForm(url, action, payload){
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const entry = {
+      resolve: (v) => { if(!settled){ settled = true; resolve(v); } },
+      reject: (e) => { if(!settled){ settled = true; reject(e); } }
+    };
+    pendingFormRequests.push(entry);
+
+    const form = $('#hiddenPostForm');
+    $('#hiddenPostAction').value = action;
+    $('#hiddenPostPayload').value = JSON.stringify(payload);
+    form.action = url;
+    form.submit();
+
+    setTimeout(() => {
+      if(settled) return;
+      const idx = pendingFormRequests.indexOf(entry);
+      if(idx >= 0) pendingFormRequests.splice(idx, 1);
+      entry.reject(new Error('サーバーからの応答がタイムアウトしました。URLとApps Scriptのデプロイ設定（アクセスできるユーザー：全員）を確認してください。'));
+    }, 20000);
+  });
 }
 
 async function apiGetAll(){
   const url = getGasUrl();
   if(!url) throw new Error('NOT_CONFIGURED');
-  const json = await gasFetch(url + '?action=getAll');
+  const json = await jsonpRequest(url, {action:'getAll'});
   if(!json.ok) throw new Error(json.error || '取得に失敗しました');
   return json.data;
 }
 async function apiUpsert(record){
   const url = getGasUrl();
   if(!url) throw new Error('NOT_CONFIGURED');
-  const json = await gasFetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'}, // avoids CORS preflight on Apps Script
-    body: JSON.stringify({action:'upsert', record})
-  });
+  const json = await submitViaHiddenForm(url, 'upsert', {record});
   if(!json.ok) throw new Error(json.error || '保存に失敗しました');
 }
 async function apiDelete(store, yearMonth){
   const url = getGasUrl();
   if(!url) throw new Error('NOT_CONFIGURED');
-  const json = await gasFetch(url, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({action:'delete', store, yearMonth})
-  });
+  const json = await submitViaHiddenForm(url, 'delete', {store, yearMonth});
   if(!json.ok) throw new Error(json.error || '削除に失敗しました');
 }
 
@@ -1475,7 +1518,7 @@ async function bootApp(){
   updateImportButtonLabel();
   if(location.protocol === 'file:'){
     $('#fileProtocolWarning').style.display = 'block';
-    $('#fileProtocolWarning').textContent = '⚠ このページはファイルとして直接開かれています（file://）。この状態だとGoogleサーバーとの通信がブラウザにブロックされ、「読み込み失敗」になります。GitHub Pagesなど https:// で配信できる場所にアップロードしてから開いてください。';
+    $('#fileProtocolWarning').textContent = '⚠ このページはファイルとして直接開かれています（file://）。念のためGitHub Pagesなど https:// で配信できる場所に置くことをおすすめしますが、うまく動く場合はそのままでも構いません。';
   } else {
     $('#fileProtocolWarning').style.display = 'none';
   }
