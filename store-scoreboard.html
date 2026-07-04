@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>店舗成績スコアボード | 月次売上分析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  // Fallback in case the primary CDN is unreachable in this environment.
+  if(typeof Chart === 'undefined'){
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"><\/script>');
+  }
+</script>
+<style>
+  :root{
+    --court-blue:#143C5C;
+    --court-blue-deep:#0B2436;
+    --chalk:#F4F6F1;
+    --panel:#FFFFFF;
+    --ink:#1C2430;
+    --ace:#7C9A11;
+    --ace-bg:#EEF3D9;
+    --fault:#B23A2E;
+    --fault-bg:#F7E4E1;
+    --grey:#8892A0;
+    --line:#DEE3DD;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--chalk);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .display{font-family:'Oswald',sans-serif;}
+  .mono{font-family:'Roboto Mono',monospace;}
+
+  /* ---------- Header ---------- */
+  header.top{
+    background:linear-gradient(135deg,var(--court-blue) 0%,var(--court-blue-deep) 100%);
+    color:#fff;
+    padding:28px 32px 24px;
+    position:relative;
+    overflow:hidden;
+  }
+  header.top::after{
+    content:"";
+    position:absolute;
+    right:-60px; top:-60px;
+    width:220px; height:220px;
+    border:3px solid rgba(255,255,255,0.08);
+    border-radius:50%;
+  }
+  header.top::before{
+    content:"";
+    position:absolute;
+    right:20px; bottom:-90px;
+    width:160px; height:160px;
+    border:3px solid rgba(255,255,255,0.06);
+    border-radius:50%;
+  }
+  .top-inner{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;}
+  .eyebrow{
+    font-family:'Oswald',sans-serif;
+    text-transform:uppercase;
+    letter-spacing:.14em;
+    font-size:12px;
+    color:#B9CBD6;
+    margin:0 0 6px;
+  }
+  h1{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:32px;
+    margin:0;
+    letter-spacing:.01em;
+  }
+  .top-actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  input[type=file]{display:none;}
+  .btn{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    padding:11px 18px;
+    border-radius:6px;
+    border:1.5px solid transparent;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    transition:transform .12s ease, opacity .12s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:#EEF3D9; color:var(--court-blue-deep);}
+  .btn-primary:hover{opacity:.9;}
+  .btn-ghost{background:transparent; color:#fff; border-color:rgba(255,255,255,.4);}
+  .btn-ghost:hover{background:rgba(255,255,255,.08);}
+  .btn-small{padding:7px 12px; font-size:12.5px;}
+  .btn-danger{background:transparent; color:var(--fault); border-color:var(--fault);}
+
+  /* ---------- Layout ---------- */
+  main{max-width:1180px; margin:0 auto; padding:28px 24px 80px;}
+  .section-title{
+    font-family:'Oswald',sans-serif;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    font-size:13px;
+    color:var(--grey);
+    display:flex; align-items:center; gap:10px;
+    margin:36px 0 14px;
+  }
+  .section-title::after{
+    content:"";
+    flex:1;
+    height:0;
+    border-top:1px dashed var(--line);
+  }
+  .section-title .num{
+    color:var(--court-blue);
+    font-weight:700;
+  }
+
+  /* ---------- Empty state ---------- */
+  .empty{
+    background:var(--panel);
+    border:1.5px dashed var(--line);
+    border-radius:var(--radius);
+    padding:60px 30px;
+    text-align:center;
+    color:var(--grey);
+  }
+  .empty .display{font-size:20px; color:var(--ink); margin-bottom:8px;}
+  .empty-inline{
+    background:var(--panel);
+    border:1.5px dashed var(--line);
+    border-radius:var(--radius);
+    padding:34px 20px;
+    text-align:center;
+    color:var(--grey);
+    font-size:13.5px;
+  }
+
+  /* ---------- Store tabs ---------- */
+  .store-tabs{display:flex; gap:10px; flex-wrap:wrap; padding-bottom:4px;}
+  .store-tab{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:14px;
+    letter-spacing:.02em;
+    padding:10px 16px;
+    border-radius:8px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    cursor:pointer;
+    color:var(--ink);
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+  }
+  .store-tab .dot{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+  .store-tab.active{color:#fff; border-color:transparent;}
+
+  /* ---------- Month tabs ---------- */
+  .month-tabs{display:flex; gap:8px; flex-wrap:wrap; padding-bottom:4px;}
+  .month-tab{
+    font-family:'Roboto Mono',monospace;
+    font-size:13px;
+    padding:8px 14px;
+    border-radius:20px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    cursor:pointer;
+    color:var(--grey);
+    position:relative;
+  }
+  .month-tab.active{
+    background:var(--court-blue);
+    border-color:var(--court-blue);
+    color:#fff;
+    font-weight:700;
+  }
+
+  /* ---------- KPI Scoreboard ---------- */
+  .kpi-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:14px;
+  }
+  @media (max-width:820px){ .kpi-grid{grid-template-columns:repeat(2,1fr);} }
+  .kpi-card{
+    background:var(--panel);
+    border-radius:var(--radius);
+    padding:16px 18px 14px;
+    border-top:3px solid var(--court-blue);
+    box-shadow:0 1px 2px rgba(20,60,92,.06);
+  }
+  .kpi-label{
+    font-family:'Oswald',sans-serif;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    font-size:11.5px;
+    color:var(--grey);
+    margin-bottom:6px;
+  }
+  .kpi-value{
+    font-family:'Oswald',sans-serif;
+    font-size:26px;
+    font-weight:600;
+    letter-spacing:.01em;
+  }
+  .kpi-value .unit{font-size:14px; font-weight:400; color:var(--grey); margin-left:3px;}
+  .kpi-delta{
+    margin-top:6px;
+    font-family:'Roboto Mono',monospace;
+    font-size:12px;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:2px 7px;
+    border-radius:4px;
+  }
+  .delta-up{background:var(--ace-bg); color:var(--ace);}
+  .delta-down{background:var(--fault-bg); color:var(--fault);}
+  .delta-flat{background:#EEF0EC; color:var(--grey);}
+  .delta-na{color:var(--grey);}
+
+  /* ---------- Charts ---------- */
+  .chart-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:820px){ .chart-grid{grid-template-columns:1fr;} }
+  .chart-card{
+    background:var(--panel);
+    border-radius:var(--radius);
+    padding:16px 18px 8px;
+    box-shadow:0 1px 2px rgba(20,60,92,.06);
+  }
+  .chart-card h3{
+    font-family:'Oswald',sans-serif;
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin:0 0 10px;
+    color:var(--ink);
+  }
+  .chart-wrap{height:220px; position:relative;}
+  .chart-card.wide{grid-column:1 / -1;}
+  .chart-card.wide .chart-wrap{height:260px;}
+
+  /* ---------- Tables ---------- */
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th,td{padding:9px 10px; text-align:right; border-bottom:1px solid var(--line);}
+  th:first-child, td:first-child{text-align:left;}
+  th{
+    font-family:'Oswald',sans-serif;
+    text-transform:uppercase;
+    font-size:11px;
+    letter-spacing:.05em;
+    color:var(--grey);
+    font-weight:600;
+  }
+  td.num, th.num{font-family:'Roboto Mono',monospace;}
+  .brand-tag{
+    display:inline-block;
+    font-family:'Roboto Mono',monospace;
+    font-size:10.5px;
+    padding:1px 6px;
+    border-radius:3px;
+    background:var(--chalk);
+    color:var(--grey);
+    margin-right:6px;
+  }
+  .store-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-family:'Oswald',sans-serif;
+    font-size:11.5px;
+    font-weight:600;
+    padding:2px 8px 2px 6px;
+    border-radius:12px;
+    background:var(--chalk);
+    color:var(--ink);
+  }
+  .store-chip .dot{width:7px; height:7px; border-radius:50%;}
+  .table-card{background:var(--panel); border-radius:var(--radius); padding:16px 18px; box-shadow:0 1px 2px rgba(20,60,92,.06); overflow-x:auto;}
+  tr.row-nodata td{color:var(--grey); font-style:italic;}
+
+  /* ---------- Compare controls ---------- */
+  .compare-controls{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+  select.select-input{
+    font-family:'Roboto Mono',monospace;
+    font-size:13px;
+    padding:8px 12px;
+    border-radius:6px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+  }
+
+  /* ---------- Data management ---------- */
+  .manage-group-title{
+    font-family:'Oswald',sans-serif;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.05em;
+    color:var(--court-blue);
+    margin:14px 0 4px;
+  }
+  .manage-group-title:first-child{margin-top:0;}
+  .manage-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--line); font-size:13.5px;
+  }
+  .manage-row:last-child{border-bottom:none;}
+  .manage-month{font-family:'Roboto Mono',monospace; font-weight:700; color:var(--court-blue);}
+  .manage-meta{color:var(--grey); font-size:12px;}
+  .manage-actions{display:flex; gap:8px; align-items:center;}
+  .footer-actions{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--court-blue-deep); color:#fff; padding:12px 20px;
+    border-radius:8px; font-size:13.5px; box-shadow:0 6px 20px rgba(0,0,0,.2);
+    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+    z-index:50;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+
+  .status-line{font-size:12.5px; color:var(--grey); margin-top:8px;}
+
+  /* ---------- Category score cards ---------- */
+  .cat-card{
+    background:var(--panel);
+    border-radius:var(--radius);
+    padding:16px 18px 14px;
+    border-top:3px solid var(--court-blue);
+    box-shadow:0 1px 2px rgba(20,60,92,.06);
+    display:flex; flex-direction:column;
+  }
+  .cat-amount{font-family:'Roboto Mono',monospace; font-size:13px; color:var(--ink); margin-top:2px;}
+  .cat-brands{margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); flex:1;}
+  .cat-brand-line{display:grid; grid-template-columns:1fr auto auto; align-items:baseline; font-size:11.5px; padding:2px 0; gap:8px;}
+  .cat-brand-line .bname{color:var(--grey); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .cat-brand-line .bqty{font-family:'Roboto Mono',monospace; color:var(--grey); white-space:nowrap;}
+  .cat-brand-line .bamt{font-family:'Roboto Mono',monospace; color:var(--ink); white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <p class="eyebrow">Monthly Store Scoreboard</p>
+      <h1>店舗成績スコアボード</h1>
+    </div>
+    <div class="top-actions">
+      <button class="btn btn-ghost" id="btnSettings">⚙ 接続設定</button>
+      <button class="btn btn-ghost" id="btnBackup">バックアップ保存</button>
+      <button class="btn btn-ghost" id="btnRestoreTrigger">復元</button>
+      <input type="file" id="restoreInput" accept="application/json">
+      <input type="text" id="manualYearMonth" class="text-input" placeholder="対象年月 例:2026-07" style="width:150px;" title="空欄なら来客数集計CSVの年月を自動で使用します。入力すると、その年月として保存/上書きします。">
+      <button class="btn btn-primary" id="btnImportTrigger">＋ データを追加</button>
+      <input type="file" id="importInput" accept=".csv" multiple>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div id="fileProtocolWarning" class="empty-inline" style="display:none; margin-bottom:16px; border-color:var(--fault); color:var(--fault);"></div>
+
+  <div id="setupState" class="empty" style="display:none;">
+    <div class="display">スプレッドシートとの接続が未設定です</div>
+    <p>このツールはGoogle スプレッドシートにデータを保存し、複数のパソコン・スマホから同じデータを見られるようにしています。<br>
+    先にGoogle Apps Scriptのウェブアプリを用意し、発行された「ウェブアプリのURL」を登録してください。</p>
+    <button class="btn btn-primary" id="btnSetupConnect" style="margin-top:10px;">接続先URLを登録する</button>
+  </div>
+
+  <div id="emptyState" class="empty" style="display:none;">
+    <div class="display">まだデータがありません</div>
+    <p>まず下の店舗タブで店舗を選び、「＋ データを追加」から来客数集計CSV（NHB形式）と<br>商品明細CSV（UI形式）を同じ月の分をまとめて選択してください。2ファイル同時選択でOKです。</p>
+  </div>
+
+  <div id="storeArea" style="display:none;">
+
+    <div class="section-title">対象店舗</div>
+    <div class="store-tabs" id="storeTabs"></div>
+
+    <div id="storeHasData">
+      <div class="section-title">対象月<span></span></div>
+      <div class="month-tabs" id="monthTabs"></div>
+
+      <div class="section-title"><span class="num">01</span> <span id="scoreTitle">今月のスコア</span></div>
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="section-title"><span class="num">02</span> <span id="categoryScoreTitle">カテゴリー別スコア</span></div>
+      <p class="status-line" id="categoryScoreNote" style="display:none;">この月は商品明細CSVが未取込のため、カテゴリー別スコアは表示できません。</p>
+      <div class="kpi-grid" id="categoryScoreGrid"></div>
+
+      <div class="section-title"><span class="num">03</span> <span id="trendsTitle">推移</span></div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>売上合計金額</h3><div class="chart-wrap"><canvas id="chartSales"></canvas></div></div>
+        <div class="chart-card"><h3>粗利 / 粗利率</h3><div class="chart-wrap"><canvas id="chartProfit"></canvas></div></div>
+        <div class="chart-card"><h3>来客数</h3><div class="chart-wrap"><canvas id="chartVisitors"></canvas></div></div>
+        <div class="chart-card"><h3>客単価</h3><div class="chart-wrap"><canvas id="chartAvg"></canvas></div></div>
+        <div class="chart-card wide"><h3>ブランド別売上推移</h3><div class="chart-wrap"><canvas id="chartBrand"></canvas></div></div>
+      </div>
+
+      <div class="section-title"><span class="num">04</span> <span id="topProductsTitle">売れ筋商品（上位15）</span></div>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr><th>商品名</th><th class="num">数量</th><th class="num">金額</th><th class="num">昨対比（数量）</th></tr>
+          </thead>
+          <tbody id="topProductsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="section-title"><span class="num">05</span> <span id="brandTitle">ブランド別サマリー</span></div>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr><th>ブランド</th><th class="num">数量</th><th class="num">金額</th><th class="num">構成比</th></tr>
+          </thead>
+          <tbody id="brandSummaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="storeNoData" class="empty-inline" style="display:none;"></div>
+
+    <div class="section-title"><span class="num">06</span> 店舗間比較</div>
+    <div class="table-card">
+      <div class="compare-controls">
+        <span class="kpi-label" style="margin:0;">比較する月</span>
+        <select id="compareMonthSelect" class="select-input"></select>
+      </div>
+      <table>
+        <thead>
+          <tr><th>店舗</th><th class="num">来客数</th><th class="num">客単価</th><th class="num">売上合計金額</th><th class="num">粗利率</th><th class="num">昨対比（売上）</th></tr>
+        </thead>
+        <tbody id="compareTableBody"></tbody>
+      </table>
+    </div>
+    <div class="chart-grid" style="margin-top:16px;">
+      <div class="chart-card"><h3>店舗別 売上（選択月）</h3><div class="chart-wrap"><canvas id="chartCompareBar"></canvas></div></div>
+      <div class="chart-card"><h3>店舗別 客単価（選択月）</h3><div class="chart-wrap"><canvas id="chartCompareAvg"></canvas></div></div>
+      <div class="chart-card wide"><h3>店舗別 売上推移</h3><div class="chart-wrap"><canvas id="chartCompareTrend"></canvas></div></div>
+    </div>
+
+    <div class="section-title"><span class="num">07</span> 取込データの管理</div>
+    <div class="table-card">
+      <div id="manageList"></div>
+      <div class="footer-actions">
+        <button class="btn btn-ghost" style="color:var(--court-blue); border-color:var(--line);" id="btnBackup2">全データをバックアップ（JSON）</button>
+      </div>
+      <p class="status-line">データはこのブラウザ内（IndexedDB）に、店舗ごと・月ごとに保存されます。別のパソコンやブラウザでも使う場合は、バックアップJSONを書き出して復元してください。</p>
+    </div>
+
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   店舗成績スコアボード（複数店舗対応）
+   - CSV(Shift_JIS) を読み込み IndexedDB に「店舗×月」で保存
+   - NHB: 年月,来客数,販売数,売上合計金額,粗利,粗利率,仕入数,仕入金額
+   - UI : 処理内容,仕入先,仕入先名,商品コード,商品名,ＪＡＮ,型番１,数量,単価,合計金額
+   ========================================================= */
+
+/* ---------- Stores ---------- */
+const STORES = ['日暮里店','町田店','立川店','岡崎店','春日井店','鴫野店'];
+const STORE_COLORS = {
+  '日暮里店':'#143C5C',
+  '町田店':'#7C9A11',
+  '立川店':'#B23A2E',
+  '岡崎店':'#3E7C9A',
+  '春日井店':'#C9A227',
+  '鴫野店':'#6B4FA0',
+};
+
+/* ---------- Utilities ---------- */
+const $ = (sel) => document.querySelector(sel);
+const fmt = (n, digits=0) => (n===null||n===undefined||isNaN(n)) ? '–' : Number(n).toLocaleString('ja-JP', {maximumFractionDigits:digits, minimumFractionDigits:digits});
+const yen = (n) => fmt(n,0);
+
+function showToast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._tm);
+  showToast._tm = setTimeout(()=> t.classList.remove('show'), 2600);
+}
+
+/* ---------- CSV parsing (RFC4180-ish) ---------- */
+function parseCSV(text){
+  const lines = text.split(/\r\n|\n|\r/).filter(l => l.length > 0);
+  return lines.map(parseCSVLine);
+}
+function parseCSVLine(line){
+  const out = [];
+  let cur = '', inQuotes = false;
+  for(let i=0;i<line.length;i++){
+    const c = line[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(line[i+1] === '"'){ cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ out.push(cur); cur=''; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+function toNum(v){
+  if(v===undefined || v===null || v==='') return 0;
+  const n = Number(String(v).replace(/,/g,''));
+  return isNaN(n) ? 0 : n;
+}
+
+async function readAsShiftJIS(file){
+  const buf = await file.arrayBuffer();
+  try{
+    return new TextDecoder('shift-jis').decode(buf);
+  }catch(e){
+    return new TextDecoder('utf-8').decode(buf);
+  }
+}
+
+/* ---------- Detect + parse each file type ---------- */
+function detectType(rows){
+  const header = rows[0] || [];
+  if(header.includes('来客数') && header.includes('年月')) return 'NHB';
+  if(header.includes('処理内容') && header.includes('商品名')) return 'UI';
+  return 'UNKNOWN';
+}
+
+function parseNHBRows(rows){
+  const header = rows[0];
+  const idx = (name) => header.indexOf(name);
+  const row = rows[1];
+  if(!row) return null;
+  const ymRaw = row[idx('年月')] || '';
+  const ym = (ymRaw.match(/\d{4}-\d{2}/) || [null])[0];
+  if(!ym) return null;
+  return {
+    yearMonth: ym,
+    visitors: toNum(row[idx('来客数')]),
+    soldQty: toNum(row[idx('販売数')]),
+    salesAmount: toNum(row[idx('売上合計金額')]),
+    grossProfit: toNum(row[idx('粗利')]),
+    grossMargin: toNum(row[idx('粗利率')]),
+    purchaseQty: toNum(row[idx('仕入数')]),
+    purchaseAmount: toNum(row[idx('仕入金額')]),
+  };
+}
+
+function parseUIRows(rows){
+  const header = rows[0];
+  const idx = (name) => header.indexOf(name);
+  const iProc = idx('処理内容'), iCode = idx('商品コード'), iName = idx('商品名'),
+        iJan = idx('ＪＡＮ'), iQty = idx('数量'), iPrice = idx('単価'), iAmt = idx('合計金額'),
+        iCat = idx('カテゴリー名１');
+
+  const salesMap = new Map(); // code -> {code,name,brand,jan,qty,amount,categoryName}
+  const brandMap = new Map(); // brand -> {qty,amount}
+  let purchaseQty=0, purchaseAmount=0, transferOutQty=0, transferOutAmount=0, transferInQty=0, transferInAmount=0;
+
+  for(let r=1; r<rows.length; r++){
+    const row = rows[r];
+    const proc = row[iProc];
+    if(proc === '販売'){
+      const code = row[iCode] || ('row'+r);
+      const name = row[iName] || '(名称不明)';
+      const brand = (name.split('/')[0] || '').trim() || 'その他';
+      const qty = toNum(row[iQty]);
+      const amt = toNum(row[iAmt]);
+      const categoryName = iCat >= 0 ? (row[iCat] || '') : '';
+      if(salesMap.has(code)){
+        const e = salesMap.get(code);
+        e.qty += qty; e.amount += amt;
+        if(!e.categoryName && categoryName) e.categoryName = categoryName;
+      } else {
+        salesMap.set(code, {code, name, brand, jan: row[iJan]||'', qty, amount: amt, categoryName});
+      }
+      if(brandMap.has(brand)){
+        const b = brandMap.get(brand);
+        b.qty += qty; b.amount += amt;
+      } else {
+        brandMap.set(brand, {qty, amount: amt});
+      }
+    } else if(proc === '仕入'){
+      purchaseQty += toNum(row[iQty]);
+      purchaseAmount += toNum(row[iAmt]);
+    } else if(proc === '移出'){
+      transferOutQty += toNum(row[iQty]);
+      transferOutAmount += toNum(row[iAmt]);
+    } else if(proc === '移入'){
+      transferInQty += toNum(row[iQty]);
+      transferInAmount += toNum(row[iAmt]);
+    }
+  }
+
+  return {
+    items: Array.from(salesMap.values()),
+    brandSummary: Object.fromEntries(brandMap),
+    stock: {purchaseQty, purchaseAmount, transferOutQty, transferOutAmount, transferInQty, transferInAmount}
+  };
+}
+
+/* ---------- Google Apps Script backend ---------- */
+const recordId = (store, ym) => store + '::' + ym;
+
+function getGasUrl(){ return localStorage.getItem('gasWebAppUrl') || ''; }
+function setGasUrl(url){ localStorage.setItem('gasWebAppUrl', url.trim()); }
+
+function promptForGasUrl(){
+  const current = getGasUrl();
+  const url = prompt('Google Apps Scriptのウェブアプリ URL（.../exec で終わるもの）を入力してください:', current || 'https://script.google.com/macros/s/XXXXXXXX/exec');
+  if(url === null) return false;
+  if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(url.trim())){
+    showToast('URLの形式が正しくないようです。script.google.comのURLを入力してください。');
+    return false;
+  }
+  setGasUrl(url);
+  showToast('接続先を保存しました');
+  return true;
+}
+
+$('#btnSettings').addEventListener('click', async () => {
+  if(promptForGasUrl()){
+    await bootApp();
+  }
+});
+$('#btnSetupConnect').addEventListener('click', async () => {
+  if(promptForGasUrl()){
+    await bootApp();
+  }
+});
+
+async function gasFetch(url, options){
+  let res;
+  try{
+    res = await fetch(url, options);
+  }catch(networkErr){
+    console.error('fetch failed:', networkErr);
+    if(location.protocol === 'file:'){
+      throw new Error('このページをファイルとして直接開いている（file://）ため、通信がブロックされています。GitHub Pagesなど https:// で配信される場所に置いてから開いてください。');
+    }
+    throw new Error('サーバーに接続できませんでした（ネットワークまたはCORSの問題の可能性があります）。URLが正しいか、Apps Scriptのデプロイ設定（アクセスできるユーザー：全員）を確認してください。');
+  }
+  let text;
+  try{
+    text = await res.text();
+  }catch(readErr){
+    throw new Error('サーバーからの応答を読み取れませんでした。');
+  }
+  if(!res.ok){
+    throw new Error('サーバーがエラーを返しました（HTTP ' + res.status + '）。' + text.slice(0,200));
+  }
+  let json;
+  try{
+    json = JSON.parse(text);
+  }catch(parseErr){
+    console.error('non-JSON response:', text.slice(0,500));
+    throw new Error('サーバーからの応答がJSON形式ではありませんでした。Apps Scriptの認証が完了していない、またはデプロイのアクセス設定が「全員」になっていない可能性があります。');
+  }
+  return json;
+}
+
+async function apiGetAll(){
+  const url = getGasUrl();
+  if(!url) throw new Error('NOT_CONFIGURED');
+  const json = await gasFetch(url + '?action=getAll');
+  if(!json.ok) throw new Error(json.error || '取得に失敗しました');
+  return json.data;
+}
+async function apiUpsert(record){
+  const url = getGasUrl();
+  if(!url) throw new Error('NOT_CONFIGURED');
+  const json = await gasFetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'}, // avoids CORS preflight on Apps Script
+    body: JSON.stringify({action:'upsert', record})
+  });
+  if(!json.ok) throw new Error(json.error || '保存に失敗しました');
+}
+async function apiDelete(store, yearMonth){
+  const url = getGasUrl();
+  if(!url) throw new Error('NOT_CONFIGURED');
+  const json = await gasFetch(url, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({action:'delete', store, yearMonth})
+  });
+  if(!json.ok) throw new Error(json.error || '削除に失敗しました');
+}
+
+function computeBrandSummary(items){
+  const map = {};
+  (items||[]).forEach(it => {
+    const b = it.brand || 'その他';
+    if(!map[b]) map[b] = {qty:0, amount:0};
+    map[b].qty += it.qty;
+    map[b].amount += it.amount;
+  });
+  return map;
+}
+
+async function loadAllRecords(){
+  const data = await apiGetAll();
+  const itemsByKey = {};
+  (data.items || []).forEach(it => {
+    const key = it.store + '::' + it.yearMonth;
+    if(!itemsByKey[key]) itemsByKey[key] = [];
+    itemsByKey[key].push({
+      code: it.code, name: it.name, brand: it.brand, jan: it.jan,
+      qty: Number(it.qty) || 0, amount: Number(it.amount) || 0,
+      categoryName: it.categoryName || ''
+    });
+  });
+  return (data.summaries || []).map(s => {
+    const key = s.store + '::' + s.yearMonth;
+    const items = itemsByKey[key] || [];
+    return {
+      id: s.id, store: s.store, yearMonth: s.yearMonth, importedAt: s.importedAt,
+      nhb: {
+        visitors: Number(s.visitors) || 0, soldQty: Number(s.soldQty) || 0, salesAmount: Number(s.salesAmount) || 0,
+        grossProfit: Number(s.grossProfit) || 0, grossMargin: Number(s.grossMargin) || 0,
+        purchaseQty: Number(s.nhbPurchaseQty) || 0, purchaseAmount: Number(s.nhbPurchaseAmount) || 0
+      },
+      stock: {
+        purchaseQty: Number(s.stockPurchaseQty) || 0, purchaseAmount: Number(s.stockPurchaseAmount) || 0,
+        transferOutQty: Number(s.transferOutQty) || 0, transferOutAmount: Number(s.transferOutAmount) || 0,
+        transferInQty: Number(s.transferInQty) || 0, transferInAmount: Number(s.transferInAmount) || 0
+      },
+      items,
+      brandSummary: computeBrandSummary(items)
+    };
+  }).sort((a,b)=> a.yearMonth.localeCompare(b.yearMonth));
+}
+
+/* ---------- App state ---------- */
+let allRecords = [];         // all records, all stores, sorted by yearMonth asc
+let selectedStore = STORES[0];
+let selectedMonth = null;    // within selectedStore
+let compareMonth = null;
+let charts = {};
+
+function recordsForStore(store){
+  return allRecords.filter(r => r.store === store).sort((a,b)=> a.yearMonth.localeCompare(b.yearMonth));
+}
+function getRecord(store, ym){ return allRecords.find(r => r.store===store && r.yearMonth===ym); }
+function getPrevRecord(store, ym){
+  const list = recordsForStore(store);
+  const i = list.findIndex(r => r.yearMonth === ym);
+  return i > 0 ? list[i-1] : null;
+}
+function getYoYRecord(store, ym){
+  const mtch = /^(\d{4})-(\d{2})$/.exec(ym);
+  if(!mtch) return null;
+  const yoyYm = (Number(mtch[1]) - 1) + '-' + mtch[2];
+  return getRecord(store, yoyYm);
+}
+function allYearMonths(){
+  const set = new Set(allRecords.map(r => r.yearMonth));
+  return Array.from(set).sort((a,b)=> b.localeCompare(a)); // desc
+}
+
+/* ---------- Import flow ---------- */
+function updateImportButtonLabel(){
+  $('#btnImportTrigger').textContent = `＋ ${selectedStore} のデータを追加`;
+}
+function getManualYearMonth(){
+  const raw = $('#manualYearMonth').value.trim();
+  if(!raw) return null;
+  const m = /^(\d{4})-(\d{2})$/.exec(raw);
+  if(!m) return 'INVALID';
+  return raw;
+}
+
+$('#btnImportTrigger').addEventListener('click', () => $('#importInput').click());
+$('#importInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if(files.length === 0) return;
+  try{
+    const manualYm = getManualYearMonth();
+    if(manualYm === 'INVALID'){
+      showToast('対象年月は「2026-07」のような形式で入力してください。');
+      e.target.value = '';
+      return;
+    }
+
+    let nhb = null, ui = null;
+    for(const f of files){
+      const text = await readAsShiftJIS(f);
+      const rows = parseCSV(text);
+      const type = detectType(rows);
+      if(type === 'NHB') nhb = parseNHBRows(rows);
+      else if(type === 'UI') ui = parseUIRows(rows);
+    }
+
+    const yearMonth = manualYm || (nhb ? nhb.yearMonth : null);
+    if(!yearMonth){
+      showToast('年月を判定できませんでした。来客数集計CSVを含めるか、対象年月を入力してください。');
+      e.target.value = '';
+      return;
+    }
+
+    const id = recordId(selectedStore, yearMonth);
+    const existing = allRecords.find(r => r.id === id);
+
+    if(!nhb && !existing){
+      showToast(`${selectedStore} ${yearMonth} のデータがまだ無いため、来客数集計CSV（NHB形式）が必要です。`);
+      e.target.value = '';
+      return;
+    }
+
+    if(existing){
+      if(!confirm(`${selectedStore} の ${yearMonth} は既に登録されています。上書きしますか？`)){
+        e.target.value = '';
+        return;
+      }
+    }
+
+    const record = {
+      id,
+      store: selectedStore,
+      yearMonth,
+      importedAt: new Date().toISOString(),
+      nhb: nhb || existing.nhb,
+      items: ui ? ui.items : (existing ? existing.items : []),
+      brandSummary: ui ? ui.brandSummary : (existing ? existing.brandSummary : {}),
+      stock: ui ? ui.stock : (existing ? existing.stock : {}),
+    };
+
+    showToast('スプレッドシートに保存中...');
+    await apiUpsert(record);
+
+    if(nhb && ui){
+      showToast(`${selectedStore} ${yearMonth} のデータを保存しました`);
+    } else if(nhb && !ui){
+      showToast(`${selectedStore} ${yearMonth} のスコアを保存しました（商品明細CSVは未取込）`);
+    } else {
+      showToast(`${selectedStore} ${yearMonth} の商品明細を更新しました`);
+    }
+
+    await loadAndRender(selectedStore, record.yearMonth);
+  }catch(err){
+    console.error(err);
+    showToast('読み込みに失敗しました: ' + err.message);
+  }
+  e.target.value = '';
+});
+
+/* ---------- Backup / Restore ---------- */
+async function doBackup(){
+  const blob = new Blob([JSON.stringify(allRecords, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `store-scoreboard-backup-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('バックアップを書き出しました');
+}
+$('#btnBackup').addEventListener('click', doBackup);
+$('#btnBackup2').addEventListener('click', doBackup);
+
+function promptForLegacyStore(){
+  const msg = '店舗名の記録がない古い形式のバックアップです。どの店舗のデータとして復元しますか？\n' +
+    STORES.map((s,i)=> `${i+1}: ${s}`).join('\n');
+  const ans = prompt(msg, '1');
+  const idx = parseInt(ans, 10) - 1;
+  return STORES[idx] || STORES[0];
+}
+
+$('#btnRestoreTrigger').addEventListener('click', () => $('#restoreInput').click());
+$('#restoreInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(!Array.isArray(data)) throw new Error('形式が不正です');
+    let legacyStore = null;
+    let count = 0;
+    for(const rec of data){
+      if(!rec.yearMonth) continue;
+      if(!rec.store){
+        if(!legacyStore) legacyStore = promptForLegacyStore();
+        rec.store = legacyStore;
+      }
+      rec.id = recordId(rec.store, rec.yearMonth);
+      count++;
+      showToast(`復元中... (${count}/${data.length})`);
+      await apiUpsert(rec);
+    }
+    showToast(count + ' 件のデータをスプレッドシートに復元しました');
+    await loadAndRender();
+  }catch(err){
+    console.error(err);
+    showToast('復元に失敗しました: ' + err.message);
+  }
+  e.target.value = '';
+});
+
+/* ---------- Delete ---------- */
+async function handleDelete(id, store, ym){
+  if(!confirm(`${store} の ${ym} のデータを削除します。よろしいですか？`)) return;
+  try{
+    showToast('削除中...');
+    await apiDelete(store, ym);
+    showToast(`${store} ${ym} を削除しました`);
+    await loadAndRender(store);
+  }catch(err){
+    console.error(err);
+    showToast('削除に失敗しました: ' + err.message);
+  }
+}
+
+/* ---------- Rendering ---------- */
+async function loadAndRender(focusStore, focusMonth){
+  try{
+    allRecords = await loadAllRecords();
+  }catch(err){
+    if(err.message === 'NOT_CONFIGURED'){
+      $('#setupState').style.display = 'block';
+      $('#emptyState').style.display = 'none';
+      $('#storeArea').style.display = 'none';
+      return;
+    }
+    console.error(err);
+    showToast('データの取得に失敗しました: ' + err.message);
+    $('#setupState').style.display = 'none';
+    $('#emptyState').style.display = 'block';
+    $('#storeArea').style.display = 'none';
+    return;
+  }
+  $('#setupState').style.display = 'none';
+
+  if(allRecords.length === 0){
+    $('#emptyState').style.display = 'block';
+    $('#storeArea').style.display = 'none';
+    return;
+  }
+  $('#emptyState').style.display = 'none';
+  $('#storeArea').style.display = 'block';
+
+  selectedStore = STORES.includes(focusStore) ? focusStore : (STORES.includes(selectedStore) ? selectedStore : STORES[0]);
+  updateImportButtonLabel();
+  renderStoreTabs();
+
+  const storeRecs = recordsForStore(selectedStore);
+  if(storeRecs.length === 0){
+    $('#storeHasData').style.display = 'none';
+    $('#storeNoData').style.display = 'block';
+    $('#storeNoData').textContent = `${selectedStore} はまだデータがありません。「＋ ${selectedStore} のデータを追加」から取り込んでください。`;
+  } else {
+    $('#storeHasData').style.display = 'block';
+    $('#storeNoData').style.display = 'none';
+
+    selectedMonth = (focusMonth && storeRecs.find(r=>r.yearMonth===focusMonth))
+      ? focusMonth
+      : storeRecs[storeRecs.length-1].yearMonth;
+
+    renderMonthTabs();
+    renderKPIs();
+    renderCategoryScore();
+    renderCharts();
+    renderTopProducts();
+    renderBrandSummary();
+  }
+
+  renderComparison();
+  renderManageList();
+}
+
+function renderStoreTabs(){
+  const wrap = $('#storeTabs');
+  wrap.innerHTML = '';
+  STORES.forEach(store => {
+    const has = recordsForStore(store).length > 0;
+    const btn = document.createElement('button');
+    btn.className = 'store-tab' + (store === selectedStore ? ' active' : '');
+    if(store === selectedStore){ btn.style.background = STORE_COLORS[store]; }
+    btn.innerHTML = `<span class="dot" style="background:${STORE_COLORS[store]}"></span>${store}${has ? '' : '<span style="color:var(--grey); font-weight:400; font-size:11px;">（未取込）</span>'}`;
+    btn.addEventListener('click', () => loadAndRender(store));
+    wrap.appendChild(btn);
+  });
+}
+
+function renderMonthTabs(){
+  const wrap = $('#monthTabs');
+  wrap.innerHTML = '';
+  recordsForStore(selectedStore).forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'month-tab' + (m.yearMonth === selectedMonth ? ' active' : '');
+    btn.textContent = m.yearMonth;
+    btn.addEventListener('click', () => {
+      selectedMonth = m.yearMonth;
+      renderMonthTabs();
+      renderKPIs();
+      renderCategoryScore();
+      renderTopProducts();
+      renderBrandSummary();
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+function deltaHTML(cur, prev, {percentPoint=false, higherIsBetter=true, digits=0}={}){
+  if(prev === null || prev === undefined || prev === 0){
+    return `<span class="kpi-delta delta-na">昨年データなし</span>`;
+  }
+  let diff, label;
+  if(percentPoint){
+    diff = cur - prev;
+    label = (diff>=0?'+':'') + fmt(diff,1) + 'pt';
+  } else {
+    diff = cur - prev;
+    const pct = (diff/Math.abs(prev))*100;
+    label = (diff>=0?'+':'') + fmt(diff,digits) + `（${pct>=0?'+':''}${fmt(pct,1)}%）`;
+  }
+  const isUp = diff > 0;
+  const isFlat = diff === 0;
+  const good = isFlat ? 'flat' : ((isUp === higherIsBetter) ? 'up' : 'down');
+  const arrow = isFlat ? '→' : (isUp ? '▲' : '▼');
+  return `<span class="kpi-delta delta-${good}">${arrow} ${label}</span>`;
+}
+
+/* ---------- Category score classification ---------- */
+function classifyForScore(item){
+  const name = (item.name || '');
+  const upper = name.toUpperCase();
+  const cat = (item.categoryName || '');
+
+  if(name.includes('会費')) return 'membership';
+  if(name.includes('大会')) return 'tournament';
+  if(cat.includes('張り工賃') || cat.includes('張り代') || name.includes('張り代')) return 'gutString';
+  if(name.includes('特価商品')) return 'specialPrice';
+
+  // Prefer the POS system's own category label when the file provides one (accurate).
+  if(cat){
+    if(cat.includes('ﾗｹｯﾄ') || cat.includes('ラケット')) return 'racket';
+    if(cat.includes('ｼｭｰｽﾞ') || cat.includes('シューズ')) return 'shoes';
+    if(cat.includes('ｳｪｱ') || cat.includes('ウェア') || cat.includes('ｼｬﾂ') || cat.includes('シャツ') || cat.includes('ｳｨﾝﾄﾞｳｫｰﾏｰ') || cat.includes('ウィンドウォーマー')) return 'wear';
+    if(cat.includes('ﾊﾞｯｸﾞ') || cat.includes('バッグ')) return 'bag';
+    if(cat.includes('ｼｬﾄﾙ') || cat.includes('シャトル')) return 'shuttle';
+    // Categorized as something else (ソックス・アクセサリー・ガット製品等) - not one of the score buckets.
+    return null;
+  }
+
+  // Fallback: no category column in this file (older UI export) - guess from the product name.
+  const parts = name.split('/');
+  const model = (parts[1]||'').trim();
+  const lastSeg = (parts[parts.length-1]||'').trim();
+  if(/^[2-6]U[4-7]G?\d?$/i.test(lastSeg) || /^[2-6]U[4-7]G?\d?$/i.test(model)) return 'racket';
+  if(upper.includes('ラケット') || upper.includes('ﾗｹｯﾄ') || upper.includes('RACKET') || upper.includes('RACQUET')) return 'racket';
+  if(upper.includes('シューズ') || upper.includes('ｼｭｰｽﾞ') || upper.includes('SHOE')) return 'shoes';
+
+  const wearKeys = ['ｳｨﾝﾄﾞｳｫｰﾏｰ','ウィンドウォーマー','ウィンドブレーカー','ｼｬﾂ','シャツ','ﾎﾟﾛ','POLO','ﾊﾟﾝﾂ','パンツ',
+                     'ｼﾞｬｹｯﾄ','ジャケット','ｽｶｰﾄ','スカート','ﾜﾝﾋﾟｰｽ','ワンピース','ｳｪｱ','ウェア','ﾄﾚｰﾅｰ','ﾊﾟｰｶｰ'];
+  if(wearKeys.some(k => name.includes(k))) return 'wear';
+
+  if(upper.includes('バッグ') || upper.includes('ﾊﾞｯｸﾞ') || upper.includes('BAG')) return 'bag';
+  if(upper.includes('シャトル') || upper.includes('ｼｬﾄﾙ') || upper.includes('SHUTTLE')) return 'shuttle';
+
+  return null;
+}
+
+const CATEGORY_DEFS = [
+  {key:'racket', label:'ラケット', unit:'本', hasBrands:true},
+  {key:'shoes', label:'シューズ', unit:'足', hasBrands:true},
+  {key:'wear', label:'ウェア', unit:'点', hasBrands:true},
+  {key:'bag', label:'バッグ', unit:'個', hasBrands:true},
+  {key:'shuttle', label:'シャトル', unit:'個', hasBrands:true},
+  {key:'gutString', label:'ガット張り', unit:'本', hasBrands:false},
+  {key:'specialPrice', label:'特価', unit:'点', hasBrands:false},
+  {key:'tournament', label:'大会', unit:'点', hasBrands:false},
+  {key:'membership', label:'会費', unit:'件', hasBrands:false},
+];
+
+function computeCategoryScore(items){
+  const cats = {};
+  CATEGORY_DEFS.forEach(d => { cats[d.key] = {qty:0, amount:0, brands:{}}; });
+  (items || []).forEach(item => {
+    const key = classifyForScore(item);
+    if(!key) return;
+    const c = cats[key];
+    c.qty += item.qty;
+    c.amount += item.amount;
+    const b = item.brand || 'その他';
+    if(!c.brands[b]) c.brands[b] = {qty:0, amount:0};
+    c.brands[b].qty += item.qty;
+    c.brands[b].amount += item.amount;
+  });
+  return cats;
+}
+
+function renderCategoryScore(){
+  const cur = getRecord(selectedStore, selectedMonth);
+  const prev = getYoYRecord(selectedStore, selectedMonth);
+  $('#categoryScoreTitle').textContent = `${selectedStore}｜${selectedMonth} のカテゴリー別スコア（昨対比）`;
+
+  const hasItems = (cur.items || []).length > 0;
+  $('#categoryScoreNote').style.display = hasItems ? 'none' : 'block';
+  if(!hasItems){
+    $('#categoryScoreGrid').innerHTML = '';
+    return;
+  }
+
+  const curCats = computeCategoryScore(cur.items);
+  const prevCats = prev ? computeCategoryScore(prev.items) : null;
+
+  $('#categoryScoreGrid').innerHTML = CATEGORY_DEFS.map(def => {
+    const c = curCats[def.key];
+    const p = prevCats ? prevCats[def.key] : null;
+    let brandsHTML = '';
+    if(def.hasBrands){
+      const brandEntries = Object.entries(c.brands).sort((a,b)=> b[1].amount - a[1].amount);
+      const top = brandEntries.slice(0,4);
+      const restAmount = brandEntries.slice(4).reduce((s,[,v])=> s+v.amount, 0);
+      const restQty = brandEntries.slice(4).reduce((s,[,v])=> s+v.qty, 0);
+      let lines = top.map(([b,v]) => `<div class="cat-brand-line"><span class="bname">${b}</span><span class="bqty">${fmt(v.qty)}${def.unit}</span><span class="bamt">¥${yen(v.amount)}</span></div>`).join('');
+      if(restAmount > 0 || restQty > 0){
+        lines += `<div class="cat-brand-line"><span class="bname">その他</span><span class="bqty">${fmt(restQty)}${def.unit}</span><span class="bamt">¥${yen(restAmount)}</span></div>`;
+      }
+      brandsHTML = brandEntries.length ? `<div class="cat-brands">${lines}</div>` : `<div class="cat-brands" style="color:var(--grey); font-size:11.5px;">実績なし</div>`;
+    }
+    return `
+      <div class="cat-card">
+        <div class="kpi-label">${def.label}</div>
+        <div class="kpi-value">${fmt(c.qty)}<span class="unit">${def.unit}</span></div>
+        <div class="cat-amount">¥${yen(c.amount)}</div>
+        <div style="margin-top:6px;">${deltaHTML(c.amount, p ? p.amount : null)}</div>
+        ${brandsHTML}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderKPIs(){
+  const cur = getRecord(selectedStore, selectedMonth);
+  const prev = getYoYRecord(selectedStore, selectedMonth);
+  const n = cur.nhb, p = prev ? prev.nhb : null;
+
+  $('#scoreTitle').textContent = `${selectedStore}｜${selectedMonth} のスコア`;
+  $('#trendsTitle').textContent = `${selectedStore} の推移`;
+  $('#topProductsTitle').textContent = `${selectedStore}｜${selectedMonth} の売れ筋商品（上位15）`;
+  $('#brandTitle').textContent = `${selectedStore}｜${selectedMonth} のブランド別サマリー`;
+
+  const avgTicket = n.visitors ? n.salesAmount / n.visitors : 0;
+  const avgTicketPrev = (p && p.visitors) ? p.salesAmount / p.visitors : null;
+  const itemsPerVisitor = n.visitors ? n.soldQty / n.visitors : 0;
+  const itemsPerVisitorPrev = (p && p.visitors) ? p.soldQty / p.visitors : null;
+
+  const cards = [
+    {label:'来客数', value: fmt(n.visitors), unit:'人', delta: deltaHTML(n.visitors, p?p.visitors:null)},
+    {label:'客単価', value: fmt(avgTicket), unit:'円', delta: deltaHTML(avgTicket, avgTicketPrev)},
+    {label:'販売数', value: fmt(n.soldQty), unit:'点', delta: deltaHTML(n.soldQty, p?p.soldQty:null)},
+    {label:'一人あたり購入点数', value: fmt(itemsPerVisitor,2), unit:'点', delta: deltaHTML(itemsPerVisitor, itemsPerVisitorPrev, {digits:2})},
+    {label:'売上合計金額', value: fmt(n.salesAmount), unit:'円', delta: deltaHTML(n.salesAmount, p?p.salesAmount:null)},
+    {label:'粗利', value: fmt(n.grossProfit), unit:'円', delta: deltaHTML(n.grossProfit, p?p.grossProfit:null)},
+    {label:'粗利率', value: fmt(n.grossMargin,1), unit:'%', delta: deltaHTML(n.grossMargin, p?p.grossMargin:null, {percentPoint:true})},
+    {label:'仕入金額', value: fmt(n.purchaseAmount), unit:'円', delta: deltaHTML(n.purchaseAmount, p?p.purchaseAmount:null, {higherIsBetter:false})},
+  ];
+
+  $('#kpiGrid').innerHTML = cards.map(c => `
+    <div class="kpi-card">
+      <div class="kpi-label">${c.label}</div>
+      <div class="kpi-value">${c.value}<span class="unit">${c.unit}</span></div>
+      ${c.delta}
+    </div>
+  `).join('');
+}
+
+/* ---------- Charts ---------- */
+function destroyChart(key){
+  if(charts[key]){ charts[key].destroy(); delete charts[key]; }
+}
+function safeChart(key, canvasId, config){
+  destroyChart(key);
+  const el = document.getElementById(canvasId);
+  if(!el) return null;
+  if(typeof Chart === 'undefined'){
+    el.parentElement.innerHTML = '<p class="status-line" style="text-align:center; padding-top:40px;">グラフの読み込みに失敗しました。通信環境をご確認のうえページを再読み込みしてください。</p>';
+    return null;
+  }
+  try{
+    const chart = new Chart(el, config);
+    charts[key] = chart;
+    return chart;
+  }catch(err){
+    console.error('chart render error:', canvasId, err);
+    return null;
+  }
+}
+function baseLineOptions(){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ font:{family:'Inter', size:11} } } },
+    scales:{
+      x:{ grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
+      y:{ grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} }
+    }
+  };
+}
+
+function renderCharts(){
+  const monthRecs = recordsForStore(selectedStore);
+  const labels = monthRecs.map(m => m.yearMonth);
+  const sales = monthRecs.map(m => m.nhb.salesAmount);
+  const profit = monthRecs.map(m => m.nhb.grossProfit);
+  const margin = monthRecs.map(m => m.nhb.grossMargin);
+  const visitors = monthRecs.map(m => m.nhb.visitors);
+  const avgTicket = monthRecs.map(m => m.nhb.visitors ? m.nhb.salesAmount / m.nhb.visitors : 0);
+
+  safeChart('sales', 'chartSales', {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'売上合計金額', data: sales, backgroundColor: STORE_COLORS[selectedStore], borderRadius:4 }] },
+    options: baseLineOptions()
+  });
+
+  safeChart('profit', 'chartProfit', {
+    data:{ labels, datasets:[
+      { type:'bar', label:'粗利（円）', data: profit, backgroundColor:'#7C9A11', borderRadius:4, yAxisID:'y' },
+      { type:'line', label:'粗利率（%）', data: margin, borderColor:'#B23A2E', backgroundColor:'#B23A2E', yAxisID:'y1', tension:.3 }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ font:{family:'Inter', size:11} } } },
+      scales:{
+        x:{ grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
+        y:{ position:'left', grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} },
+        y1:{ position:'right', grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} }
+      }
+    }
+  });
+
+  safeChart('visitors', 'chartVisitors', {
+    type:'line',
+    data:{ labels, datasets:[{ label:'来客数', data: visitors, borderColor: STORE_COLORS[selectedStore], backgroundColor: STORE_COLORS[selectedStore], tension:.3, fill:false }] },
+    options: baseLineOptions()
+  });
+
+  safeChart('avg', 'chartAvg', {
+    type:'line',
+    data:{ labels, datasets:[{ label:'客単価', data: avgTicket, borderColor:'#7C9A11', backgroundColor:'#7C9A11', tension:.3, fill:false }] },
+    options: baseLineOptions()
+  });
+
+  /* brand stacked bar: top 5 brands overall (this store) + その他 */
+  const totals = {};
+  monthRecs.forEach(m => {
+    Object.entries(m.brandSummary || {}).forEach(([b,v]) => {
+      totals[b] = (totals[b]||0) + v.amount;
+    });
+  });
+  const topBrands = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>x[0]);
+  const palette = ['#143C5C','#7C9A11','#B23A2E','#8892A0','#3E7C9A','#C9A227'];
+  const brandDatasets = topBrands.map((b,i) => ({
+    label: b,
+    data: monthRecs.map(m => (m.brandSummary && m.brandSummary[b]) ? m.brandSummary[b].amount : 0),
+    backgroundColor: palette[i % palette.length],
+    stack:'brand'
+  }));
+  brandDatasets.push({
+    label:'その他',
+    data: monthRecs.map(m => {
+      const bs = m.brandSummary || {};
+      const topSum = topBrands.reduce((s,b)=> s + (bs[b]?bs[b].amount:0), 0);
+      const all = Object.values(bs).reduce((s,v)=> s+v.amount, 0);
+      return all - topSum;
+    }),
+    backgroundColor:'#D8DEE2',
+    stack:'brand'
+  });
+
+  safeChart('brand', 'chartBrand', {
+    type:'bar',
+    data:{ labels, datasets: brandDatasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Inter', size:11} } } },
+      scales:{
+        x:{ stacked:true, grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
+        y:{ stacked:true, grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} }
+      }
+    }
+  });
+}
+
+/* ---------- Top products table ---------- */
+function renderTopProducts(){
+  const cur = getRecord(selectedStore, selectedMonth);
+  const prev = getYoYRecord(selectedStore, selectedMonth);
+  const prevMap = new Map((prev?.items||[]).map(i => [i.code, i]));
+
+  const top = [...(cur.items||[])].sort((a,b)=> b.amount - a.amount).slice(0,15);
+
+  if(top.length === 0){
+    $('#topProductsBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">この月は商品明細CSVが未取込です</td></tr>`;
+    return;
+  }
+
+  $('#topProductsBody').innerHTML = top.map(item => {
+    const p = prevMap.get(item.code);
+    let deltaCell;
+    if(p){
+      const diff = item.qty - p.qty;
+      const cls = diff>0 ? 'delta-up' : (diff<0 ? 'delta-down' : 'delta-flat');
+      const arrow = diff>0 ? '▲' : (diff<0 ? '▼' : '→');
+      deltaCell = `<span class="kpi-delta ${cls}">${arrow} ${diff>=0?'+':''}${fmt(diff)}</span>`;
+    } else {
+      deltaCell = `<span class="kpi-delta delta-na">新規</span>`;
+    }
+    return `<tr>
+      <td><span class="brand-tag">${item.brand}</span>${item.name}</td>
+      <td class="num">${fmt(item.qty)}</td>
+      <td class="num">¥${yen(item.amount)}</td>
+      <td class="num">${deltaCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------- Brand summary table ---------- */
+function renderBrandSummary(){
+  const cur = getRecord(selectedStore, selectedMonth);
+  const bs = cur.brandSummary || {};
+  const entries = Object.entries(bs).sort((a,b)=> b[1].amount - a[1].amount);
+  const total = entries.reduce((s,[,v])=> s+v.amount, 0);
+
+  if(entries.length === 0){
+    $('#brandSummaryBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">この月は商品明細CSVが未取込です</td></tr>`;
+    return;
+  }
+
+  $('#brandSummaryBody').innerHTML = entries.map(([brand, v]) => `
+    <tr>
+      <td>${brand}</td>
+      <td class="num">${fmt(v.qty)}</td>
+      <td class="num">¥${yen(v.amount)}</td>
+      <td class="num">${total? fmt(v.amount/total*100,1):'0.0'}%</td>
+    </tr>
+  `).join('');
+}
+
+/* ---------- Store comparison ---------- */
+function renderComparison(){
+  const months = allYearMonths(); // desc
+  if(months.length === 0) return;
+
+  const sel = $('#compareMonthSelect');
+  const prevSelection = compareMonth;
+  sel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
+  compareMonth = (prevSelection && months.includes(prevSelection)) ? prevSelection : months[0];
+  sel.value = compareMonth;
+  sel.onchange = () => { compareMonth = sel.value; renderComparisonBody(); };
+
+  renderComparisonBody();
+}
+
+function renderComparisonBody(){
+  const rows = STORES.map(store => {
+    const rec = getRecord(store, compareMonth);
+    if(!rec) return {store, hasData:false};
+    const prev = getYoYRecord(store, compareMonth);
+    const n = rec.nhb, p = prev ? prev.nhb : null;
+    const avgTicket = n.visitors ? n.salesAmount / n.visitors : 0;
+    return {store, hasData:true, visitors:n.visitors, avgTicket, sales:n.salesAmount, margin:n.grossMargin, salesPrev: p?p.salesAmount:null};
+  });
+
+  $('#compareTableBody').innerHTML = rows.map(r => {
+    if(!r.hasData){
+      return `<tr class="row-nodata"><td><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[r.store]}"></span>${r.store}</span></td><td class="num" colspan="5">${compareMonth} のデータなし</td></tr>`;
+    }
+    return `<tr>
+      <td><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[r.store]}"></span>${r.store}</span></td>
+      <td class="num">${fmt(r.visitors)}人</td>
+      <td class="num">¥${yen(r.avgTicket)}</td>
+      <td class="num">¥${yen(r.sales)}</td>
+      <td class="num">${fmt(r.margin,1)}%</td>
+      <td class="num">${deltaHTML(r.sales, r.salesPrev)}</td>
+    </tr>`;
+  }).join('');
+
+  const withData = rows.filter(r => r.hasData).sort((a,b)=> b.sales - a.sales);
+
+  safeChart('compareBar', 'chartCompareBar', {
+    type:'bar',
+    data:{
+      labels: withData.map(r=>r.store),
+      datasets:[{ label:'売上合計金額', data: withData.map(r=>r.sales), backgroundColor: withData.map(r=>STORE_COLORS[r.store]), borderRadius:4 }]
+    },
+    options:{ ...baseLineOptions(), plugins:{legend:{display:false}} }
+  });
+
+  safeChart('compareAvg', 'chartCompareAvg', {
+    type:'bar',
+    data:{
+      labels: withData.map(r=>r.store),
+      datasets:[{ label:'客単価', data: withData.map(r=>r.avgTicket), backgroundColor: withData.map(r=>STORE_COLORS[r.store]), borderRadius:4 }]
+    },
+    options:{ ...baseLineOptions(), plugins:{legend:{display:false}} }
+  });
+
+  const trendLabels = allYearMonths().slice().sort((a,b)=> a.localeCompare(b));
+  const trendDatasets = STORES.filter(s => recordsForStore(s).length>0).map(store => ({
+    label: store,
+    data: trendLabels.map(ym => { const r = getRecord(store, ym); return r ? r.nhb.salesAmount : null; }),
+    borderColor: STORE_COLORS[store],
+    backgroundColor: STORE_COLORS[store],
+    spanGaps: true,
+    tension:.3,
+    fill:false
+  }));
+  safeChart('compareTrend', 'chartCompareTrend', {
+    type:'line',
+    data:{ labels: trendLabels, datasets: trendDatasets },
+    options: baseLineOptions()
+  });
+}
+
+/* ---------- Manage list ---------- */
+function renderManageList(){
+  const wrap = $('#manageList');
+  const groups = STORES.map(store => ({store, recs: recordsForStore(store).slice().reverse()})).filter(g => g.recs.length>0);
+
+  if(groups.length === 0){
+    wrap.innerHTML = `<p class="status-line" style="margin:0;">データがありません。</p>`;
+    return;
+  }
+
+  wrap.innerHTML = groups.map(g => `
+    <div class="manage-group-title"><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[g.store]}"></span>${g.store}</span></div>
+    ${g.recs.map(m => {
+      const dt = new Date(m.importedAt);
+      const stamp = isNaN(dt) ? '' : dt.toLocaleString('ja-JP');
+      const hasItems = (m.items||[]).length > 0;
+      return `<div class="manage-row">
+        <div>
+          <span class="manage-month">${m.yearMonth}</span>
+          <span class="manage-meta">　取込: ${stamp}　${hasItems? '（商品明細あり）':'（商品明細なし）'}</span>
+        </div>
+        <div class="manage-actions">
+          <button class="btn btn-small btn-danger" data-del="${m.id}" data-store="${m.store}" data-ym="${m.yearMonth}">削除</button>
+        </div>
+      </div>`;
+    }).join('')}
+  `).join('');
+
+  wrap.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => handleDelete(btn.getAttribute('data-del'), btn.getAttribute('data-store'), btn.getAttribute('data-ym')));
+  });
+}
+
+/* ---------- Init ---------- */
+async function bootApp(){
+  updateImportButtonLabel();
+  if(location.protocol === 'file:'){
+    $('#fileProtocolWarning').style.display = 'block';
+    $('#fileProtocolWarning').textContent = '⚠ このページはファイルとして直接開かれています（file://）。この状態だとGoogleサーバーとの通信がブラウザにブロックされ、「読み込み失敗」になります。GitHub Pagesなど https:// で配信できる場所にアップロードしてから開いてください。';
+  } else {
+    $('#fileProtocolWarning').style.display = 'none';
+  }
+  if(!getGasUrl()){
+    $('#setupState').style.display = 'block';
+    $('#emptyState').style.display = 'none';
+    $('#storeArea').style.display = 'none';
+    return;
+  }
+  showToast('読み込み中...');
+  await loadAndRender();
+}
+bootApp();
+</script>
+</body>
+</html>
