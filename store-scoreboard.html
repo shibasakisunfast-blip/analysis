@@ -611,6 +611,20 @@ function parseNHBRows(rows){
   };
 }
 
+function extractBrand(name){
+  const trimmed = (name || '').trim();
+  if(trimmed.includes('張り代')) return 'ガット張り代';
+  if(/^FUSION/i.test(trimmed)) return 'FUSION';
+  const first = (trimmed.split('/')[0] || '').trim();
+  if(!first || first === trimmed){
+    // No "/" delimiter at all -> this isn't a "BRAND/MODEL/..." formatted product
+    // (service fees, misc accessories, etc.) - group these together rather than
+    // using each item's own name as a one-off pseudo-brand.
+    return 'その他';
+  }
+  return first;
+}
+
 function parseUIRows(rows){
   const header = rows[0];
   const idx = (name) => header.indexOf(name);
@@ -628,7 +642,7 @@ function parseUIRows(rows){
     if(proc === '販売'){
       const code = row[iCode] || ('row'+r);
       const name = row[iName] || '(名称不明)';
-      const brand = (name.split('/')[0] || '').trim() || 'その他';
+      const brand = extractBrand(name);
       const qty = toNum(row[iQty]);
       const amt = toNum(row[iAmt]);
       const categoryName = iCat >= 0 ? (row[iCat] || '') : '';
