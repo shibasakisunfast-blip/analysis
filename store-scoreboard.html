@@ -445,14 +445,14 @@
       </div>
       <table>
         <thead>
-          <tr><th>店舗</th><th class="num">来客数</th><th class="num">客単価</th><th class="num">売上合計金額</th><th class="num">粗利率</th><th class="num">昨対比（売上）</th></tr>
+          <tr><th>店舗</th><th class="num">来客数</th><th class="num">粗利</th><th class="num">売上合計金額</th><th class="num">粗利率</th><th class="num">昨対比（売上）</th></tr>
         </thead>
         <tbody id="compareTableBody"></tbody>
       </table>
     </div>
     <div class="chart-grid" style="margin-top:16px;">
       <div class="chart-card"><h3>店舗別 売上（選択月）</h3><div class="chart-wrap"><canvas id="chartCompareBar"></canvas></div></div>
-      <div class="chart-card"><h3>店舗別 客単価（選択月）</h3><div class="chart-wrap"><canvas id="chartCompareAvg"></canvas></div></div>
+      <div class="chart-card"><h3>店舗別 粗利（選択月）</h3><div class="chart-wrap"><canvas id="chartCompareAvg"></canvas></div></div>
       <div class="chart-card wide"><h3>店舗別 売上推移</h3><div class="chart-wrap"><canvas id="chartCompareTrend"></canvas></div></div>
     </div>
 
@@ -1142,6 +1142,15 @@ function deltaHTML(cur, prev, {percentPoint=false, higherIsBetter=true, digits=0
 
 /* ---------- Category score classification ---------- */
 function classifyForScore(item){
+  const rawKey = classifyRaw(item);
+  // Wear items sold at ¥0 are promotional giveaways (campaign gifts), not real wear sales.
+  if(rawKey === 'wear' && (item.amount || 0) === 0 && (item.qty || 0) > 0){
+    return 'campaign';
+  }
+  return rawKey;
+}
+
+function classifyRaw(item){
   const name = (item.name || '');
   const upper = name.toUpperCase();
   const cat = (item.categoryName || '');
@@ -1186,6 +1195,7 @@ const CATEGORY_DEFS = [
   {key:'wear', label:'ウェア', unit:'点', hasBrands:true},
   {key:'bag', label:'バッグ', unit:'個', hasBrands:true},
   {key:'shuttle', label:'シャトル', unit:'個', hasBrands:true},
+  {key:'campaign', label:'キャンペーン', unit:'点', hasBrands:true},
   {key:'gutString', label:'ガット張り', unit:'本', hasBrands:false},
   {key:'specialPrice', label:'特価', unit:'点', hasBrands:false},
   {key:'tournament', label:'大会', unit:'点', hasBrands:false},
@@ -1481,8 +1491,7 @@ function renderComparisonBody(){
     if(!rec) return {store, hasData:false};
     const prev = getYoYRecord(store, compareMonth);
     const n = rec.nhb, p = prev ? prev.nhb : null;
-    const avgTicket = n.visitors ? n.salesAmount / n.visitors : 0;
-    return {store, hasData:true, visitors:n.visitors, avgTicket, sales:n.salesAmount, margin:n.grossMargin, salesPrev: p?p.salesAmount:null};
+    return {store, hasData:true, visitors:n.visitors, grossProfit:n.grossProfit, sales:n.salesAmount, margin:n.grossMargin, salesPrev: p?p.salesAmount:null};
   });
 
   $('#compareTableBody').innerHTML = rows.map(r => {
@@ -1492,7 +1501,7 @@ function renderComparisonBody(){
     return `<tr>
       <td><span class="store-chip"><span class="dot" style="background:${STORE_COLORS[r.store]}"></span>${r.store}</span></td>
       <td class="num">${fmt(r.visitors)}人</td>
-      <td class="num">¥${yen(r.avgTicket)}</td>
+      <td class="num">¥${yen(r.grossProfit)}</td>
       <td class="num">¥${yen(r.sales)}</td>
       <td class="num">${fmt(r.margin,1)}%</td>
       <td class="num">${deltaHTML(r.sales, r.salesPrev)}</td>
@@ -1514,7 +1523,7 @@ function renderComparisonBody(){
     type:'bar',
     data:{
       labels: withData.map(r=>r.store),
-      datasets:[{ label:'客単価', data: withData.map(r=>r.avgTicket), backgroundColor: withData.map(r=>STORE_COLORS[r.store]), borderRadius:4 }]
+      datasets:[{ label:'粗利', data: withData.map(r=>r.grossProfit), backgroundColor: withData.map(r=>STORE_COLORS[r.store]), borderRadius:4 }]
     },
     options:{ ...baseLineOptions(), plugins:{legend:{display:false}} }
   });
