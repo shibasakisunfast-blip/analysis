@@ -823,7 +823,7 @@ async function loadAllRecords(){
     const key = store + '::' + yearMonth;
     if(!itemsByKey[key]) itemsByKey[key] = [];
     itemsByKey[key].push({
-      code: asText(it.code), name: asText(it.name), brand: asText(it.brand), jan: asText(it.jan),
+      code: asText(it.code), name: asText(it.name), brand: extractBrand(asText(it.name)), jan: asText(it.jan),
       qty: Number(it.qty) || 0, amount: Number(it.amount) || 0,
       categoryName: asText(it.categoryName)
     });
