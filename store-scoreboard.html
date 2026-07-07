@@ -790,6 +790,20 @@ async function apiGetAll(){
   if(!json.ok) throw new Error(json.error || '取得に失敗しました');
   return json.data;
 }
+async function apiGetSummaries(){
+  const url = getGasUrl();
+  if(!url) throw new Error('NOT_CONFIGURED');
+  const json = await jsonpRequest(url, {action:'getSummaries'});
+  if(!json.ok) throw new Error(json.error || '取得に失敗しました');
+  return json.data;
+}
+async function apiGetItems(keys){
+  const url = getGasUrl();
+  if(!url) throw new Error('NOT_CONFIGURED');
+  const json = await jsonpRequest(url, {action:'getItems', keys: keys.join(',')});
+  if(!json.ok) throw new Error(json.error || '商品明細の取得に失敗しました');
+  return json.data;
+}
 async function apiUpsert(record){
   const url = getGasUrl();
   if(!url) throw new Error('NOT_CONFIGURED');
@@ -814,24 +828,49 @@ function computeBrandSummary(items){
   return map;
 }
 
-async function loadAllRecords(){
-  const data = await apiGetAll();
-  const asText = (v) => (v === null || v === undefined) ? '' : String(v);
-  const itemsByKey = {};
+const asText = (v) => (v === null || v === undefined) ? '' : String(v);
+const itemsCache = {}; // "store::yearMonth" -> normalized items array (only months actually viewed so far)
+
+function normalizeItem(it){
+  return {
+    code: asText(it.code), name: asText(it.name), brand: extractBrand(asText(it.name)), jan: asText(it.jan),
+    qty: Number(it.qty) || 0, amount: Number(it.amount) || 0,
+    categoryName: asText(it.categoryName)
+  };
+}
+
+/* Fetches item-level detail for any of the given "store::yearMonth" keys not
+   already cached, in a single batched request. Returns true if anything new
+   was actually fetched (so callers know whether a re-render is worthwhile). */
+async function ensureItemsLoaded(keys){
+  const missing = [...new Set(keys)].filter(k => !(k in itemsCache));
+  if(missing.length === 0) return false;
+  showToast('商品明細を読み込み中...');
+  const data = await apiGetItems(missing);
+  const byKey = {};
+  missing.forEach(k => { byKey[k] = []; });
   (data.items || []).forEach(it => {
-    const store = asText(it.store), yearMonth = asText(it.yearMonth);
-    const key = store + '::' + yearMonth;
-    if(!itemsByKey[key]) itemsByKey[key] = [];
-    itemsByKey[key].push({
-      code: asText(it.code), name: asText(it.name), brand: extractBrand(asText(it.name)), jan: asText(it.jan),
-      qty: Number(it.qty) || 0, amount: Number(it.amount) || 0,
-      categoryName: asText(it.categoryName)
-    });
+    const key = asText(it.store) + '::' + asText(it.yearMonth);
+    if(!byKey[key]) byKey[key] = [];
+    byKey[key].push(normalizeItem(it));
   });
-  return (data.summaries || []).map(s => {
+  Object.assign(itemsCache, byKey);
+  return true;
+}
+
+/* Loads every month currently known for one store in a single request (cheap
+   since Summary is already fully loaded, so we know all its yearMonths). */
+async function ensureStoreItemsLoaded(store){
+  const keys = summaryRecords.filter(s => s.store === store).map(s => s.store + '::' + s.yearMonth);
+  return ensureItemsLoaded(keys);
+}
+
+function buildRecordsFromSummaries(rawSummaries){
+  summaryRecords = rawSummaries.map(s => ({store: asText(s.store), yearMonth: asText(s.yearMonth)}));
+  return rawSummaries.map(s => {
     const store = asText(s.store), yearMonth = asText(s.yearMonth);
     const key = store + '::' + yearMonth;
-    const items = itemsByKey[key] || [];
+    const items = itemsCache[key] || [];
     return {
       id: asText(s.id), store, yearMonth, importedAt: asText(s.importedAt),
       nhb: {
@@ -850,8 +889,23 @@ async function loadAllRecords(){
   }).sort((a,b)=> a.yearMonth.localeCompare(b.yearMonth));
 }
 
+/* Re-populates .items/.brandSummary on the existing allRecords objects (in place)
+   from whatever is currently in itemsCache. Called after ensureItemsLoaded() so
+   newly-fetched item data actually reaches records already built by
+   buildRecordsFromSummaries, without needing to refetch summaries. */
+function refreshItemsOnRecords(){
+  allRecords.forEach(rec => {
+    const key = rec.store + '::' + rec.yearMonth;
+    if(key in itemsCache){
+      rec.items = itemsCache[key];
+      rec.brandSummary = computeBrandSummary(rec.items);
+    }
+  });
+}
+
 /* ---------- App state ---------- */
 let allRecords = [];         // all records, all stores, sorted by yearMonth asc
+let summaryRecords = [];     // lightweight {store,yearMonth} list from the last summaries fetch
 let selectedStore = STORES[0];
 let selectedMonth = null;    // within selectedStore
 let compareMonth = null;
@@ -946,6 +1000,7 @@ $('#importInput').addEventListener('change', async (e) => {
 
     showToast('スプレッドシートに保存中...');
     await apiUpsert(record);
+    itemsCache[record.store + '::' + record.yearMonth] = record.items || [];
 
     if(nhb && ui){
       showToast(`${selectedStore} ${yearMonth} のデータを保存しました`);
@@ -965,6 +1020,15 @@ $('#importInput').addEventListener('change', async (e) => {
 
 /* ---------- Backup / Restore ---------- */
 async function doBackup(){
+  try{
+    showToast('バックアップの準備中...（全店舗の商品明細を確認しています）');
+    const allKeys = allRecords.map(r => r.store + '::' + r.yearMonth);
+    const fetchedNew = await ensureItemsLoaded(allKeys);
+    if(fetchedNew) refreshItemsOnRecords();
+  }catch(err){
+    console.error(err);
+    showToast('一部データの取得に失敗しました。バックアップが不完全な可能性があります: ' + err.message);
+  }
   const blob = new Blob([JSON.stringify(allRecords, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1005,6 +1069,7 @@ $('#restoreInput').addEventListener('change', async (e) => {
       count++;
       showToast(`復元中... (${count}/${data.length})`);
       await apiUpsert(rec);
+      itemsCache[rec.store + '::' + rec.yearMonth] = rec.items || [];
     }
     showToast(count + ' 件のデータをスプレッドシートに復元しました');
     await loadAndRender();
@@ -1021,6 +1086,7 @@ async function handleDelete(id, store, ym){
   try{
     showToast('削除中...');
     await apiDelete(store, ym);
+    delete itemsCache[store + '::' + ym];
     showToast(`${store} ${ym} を削除しました`);
     await loadAndRender(store);
   }catch(err){
@@ -1032,7 +1098,8 @@ async function handleDelete(id, store, ym){
 /* ---------- Rendering ---------- */
 async function loadAndRender(focusStore, focusMonth){
   try{
-    allRecords = await loadAllRecords();
+    const data = await apiGetSummaries();
+    allRecords = buildRecordsFromSummaries(data.summaries || []);
   }catch(err){
     if(err.message === 'NOT_CONFIGURED'){
       $('#setupState').style.display = 'block';
@@ -1076,6 +1143,18 @@ async function loadAndRender(focusStore, focusMonth){
 
     renderMonthTabs();
     renderKPIs();
+
+    // Sections 02-05 all need this store's item-level detail (category score,
+    // brand trend chart, top products, brand summary). Fetch it once here -
+    // only for the selected store's months, not every store's full history.
+    try{
+      const fetchedNew = await ensureStoreItemsLoaded(selectedStore);
+      if(fetchedNew) refreshItemsOnRecords();
+    }catch(err){
+      console.error(err);
+      showToast('商品明細の取得に失敗しました: ' + err.message);
+    }
+
     renderCategoryScore();
     renderCharts();
     renderTopProducts();
@@ -1083,7 +1162,12 @@ async function loadAndRender(focusStore, focusMonth){
   }
 
   renderComparison();
-  renderPeriodAnalysis();
+  try{
+    await renderPeriodAnalysis();
+  }catch(err){
+    console.error(err);
+    showToast('期間分析の読み込みに失敗しました: ' + err.message);
+  }
   renderManageList();
 }
 
@@ -1594,19 +1678,26 @@ function initPeriodControlsIfNeeded(){
     </label>
   `).join('');
   wrap.querySelectorAll('.period-store-cb').forEach(cb => cb.value === selectedStore && (cb.checked = true));
-  wrap.addEventListener('change', renderPeriodAnalysis);
+  wrap.addEventListener('change', runPeriodAnalysisSafely);
   $('#periodStartSelect').addEventListener('change', () => {
     periodStart = $('#periodStartSelect').value;
-    renderPeriodAnalysis();
+    runPeriodAnalysisSafely();
   });
   $('#periodEndSelect').addEventListener('change', () => {
     periodEnd = $('#periodEndSelect').value;
-    renderPeriodAnalysis();
+    runPeriodAnalysisSafely();
   });
   periodControlsInitialized = true;
 }
 
-function renderPeriodAnalysis(){
+function runPeriodAnalysisSafely(){
+  renderPeriodAnalysis().catch(err => {
+    console.error(err);
+    showToast('期間分析の読み込みに失敗しました: ' + err.message);
+  });
+}
+
+async function renderPeriodAnalysis(){
   const months = allYearMonths().slice().sort((a,b)=> a.localeCompare(b)); // asc
   if(months.length === 0) return;
   initPeriodControlsIfNeeded();
@@ -1660,6 +1751,15 @@ function renderPeriodAnalysis(){
 
   // Category comparison across whichever stores have data in this period.
   const activeStores = rows.map(r => r.store);
+  const neededKeys = [];
+  activeStores.forEach(store => {
+    rows.find(r => r.store === store).totals.records.forEach(rec => {
+      neededKeys.push(store + '::' + rec.yearMonth);
+    });
+  });
+  const fetchedNew = await ensureItemsLoaded(neededKeys);
+  if(fetchedNew) refreshItemsOnRecords();
+
   $('#periodCategoryCompareTitle').textContent = `${periodStart}〜${periodEnd} のカテゴリー別比較`;
   const catsByStore = activeStores.map(store => ({store, cats: computePeriodCategoryScore(store, periodStart, periodEnd)}));
 
