@@ -715,23 +715,27 @@ function jsonpRequest(url, params){
     const script = document.createElement('script');
     let settled = false;
 
-    function cleanup(){
-      delete window[cbName];
+    function cleanup(keepStub){
+      // If we're cleaning up because of a timeout, leave a harmless no-op in
+      // place of the real callback (instead of deleting it) so that a GAS
+      // response arriving late doesn't throw an uncaught ReferenceError.
+      if(keepStub){ window[cbName] = () => {}; }
+      else { delete window[cbName]; }
       if(script.parentNode) script.parentNode.removeChild(script);
       clearTimeout(timer);
     }
     window[cbName] = (data) => {
       if(settled) return;
       settled = true;
-      cleanup();
+      cleanup(false);
       resolve(data);
     };
     const timer = setTimeout(() => {
       if(settled) return;
       settled = true;
-      cleanup();
-      reject(new Error('サーバーからの応答がタイムアウトしました。URLとApps Scriptのデプロイ設定（アクセスできるユーザー：全員）を確認してください。'));
-    }, 20000);
+      cleanup(true);
+      reject(new Error('サーバーからの応答がタイムアウトしました（60秒）。データ量が多い場合は少し待ってからもう一度お試しください。'));
+    }, 60000);
 
     const qs = Object.assign({}, params, {callback: cbName});
     const query = Object.keys(qs).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(qs[k])).join('&');
@@ -739,7 +743,7 @@ function jsonpRequest(url, params){
     script.onerror = () => {
       if(settled) return;
       settled = true;
-      cleanup();
+      cleanup(true);
       reject(new Error('サーバーに接続できませんでした。URLが正しいかご確認ください。'));
     };
     document.body.appendChild(script);
