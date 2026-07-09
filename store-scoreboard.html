@@ -797,7 +797,14 @@ async function apiGetAll(){
 async function apiGetSummaries(){
   const url = getGasUrl();
   if(!url) throw new Error('NOT_CONFIGURED');
-  const json = await jsonpRequest(url, {action:'getSummaries'});
+  let json;
+  try{
+    json = await jsonpRequest(url, {action:'getSummaries'});
+  }catch(err){
+    console.warn('概要データの取得に失敗、1回だけ再試行します:', err.message);
+    showToast('通信が不安定なようです。再試行しています...');
+    json = await jsonpRequest(url, {action:'getSummaries'});
+  }
   if(!json.ok) throw new Error(json.error || '取得に失敗しました');
   return json.data;
 }
@@ -846,20 +853,45 @@ function normalizeItem(it){
 /* Fetches item-level detail for any of the given "store::yearMonth" keys not
    already cached, in a single batched request. Returns true if anything new
    was actually fetched (so callers know whether a re-render is worthwhile). */
+const ITEMS_FETCH_BATCH_SIZE = 3; // keep each JSONP request small/light for reliability
+
 async function ensureItemsLoaded(keys){
   const missing = [...new Set(keys)].filter(k => !(k in itemsCache));
   if(missing.length === 0) return false;
-  showToast('商品明細を読み込み中...');
-  const data = await apiGetItems(missing);
-  const byKey = {};
-  missing.forEach(k => { byKey[k] = []; });
-  (data.items || []).forEach(it => {
-    const key = asText(it.store) + '::' + asText(it.yearMonth);
-    if(!byKey[key]) byKey[key] = [];
-    byKey[key].push(normalizeItem(it));
-  });
-  Object.assign(itemsCache, byKey);
+
+  const batches = [];
+  for(let i=0; i<missing.length; i+=ITEMS_FETCH_BATCH_SIZE){
+    batches.push(missing.slice(i, i+ITEMS_FETCH_BATCH_SIZE));
+  }
+
+  for(let b=0; b<batches.length; b++){
+    const batch = batches[b];
+    if(batches.length > 1){
+      showToast(`商品明細を読み込み中...（${b+1}/${batches.length}）`);
+    } else {
+      showToast('商品明細を読み込み中...');
+    }
+    const data = await fetchItemsBatchWithRetry(batch);
+    const byKey = {};
+    batch.forEach(k => { byKey[k] = []; });
+    (data.items || []).forEach(it => {
+      const key = asText(it.store) + '::' + asText(it.yearMonth);
+      if(!byKey[key]) byKey[key] = [];
+      byKey[key].push(normalizeItem(it));
+    });
+    Object.assign(itemsCache, byKey);
+  }
   return true;
+}
+
+async function fetchItemsBatchWithRetry(batch){
+  try{
+    return await apiGetItems(batch);
+  }catch(err){
+    console.warn('商品明細の取得に失敗、1回だけ再試行します:', err.message);
+    showToast('通信が不安定なようです。再試行しています...');
+    return await apiGetItems(batch);
+  }
 }
 
 /* Loads every month currently known for one store in a single request (cheap
