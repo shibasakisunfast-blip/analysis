@@ -1132,6 +1132,14 @@ async function handleDelete(id, store, ym){
 }
 
 /* ---------- Rendering ---------- */
+function clearItemDependentSections(){
+  $('#categoryScoreNote').style.display = 'none';
+  $('#categoryScoreGrid').innerHTML = `<p class="status-line" style="grid-column:1/-1; text-align:center; padding:20px 0;">商品明細を読み込み中...</p>`;
+  $('#topProductsBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">読み込み中...</td></tr>`;
+  $('#brandSummaryBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">読み込み中...</td></tr>`;
+  destroyChart('brand');
+}
+
 async function loadAndRender(focusStore, focusMonth){
   try{
     const data = await apiGetSummaries();
@@ -1179,6 +1187,11 @@ async function loadAndRender(focusStore, focusMonth){
 
     renderMonthTabs();
     renderKPIs();
+
+    // Blank out the item-dependent sections immediately so they never show
+    // stale data left over from whichever store was selected before this one
+    // while the fetch below is in flight.
+    clearItemDependentSections();
 
     // Sections 02-05 all need this store's item-level detail (category score,
     // brand trend chart, top products, brand summary). Fetch it once here -
