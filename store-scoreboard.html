@@ -622,19 +622,30 @@ function parseNHBRows(rows){
 // first-segment split picks up the wrong (or overly specific) "brand". Known
 // cases get corrected here; add more entries as they turn up.
 const BRAND_OVERRIDES = [
-  {match: 'TK-TTYUL', brand: 'VICTOR'},   // "TK-TTYUL Ultima" is a VICTOR shuttlecock line, not a brand name
-  {match: 'AVSK279-2', brand: 'LI-NING'}, // "AVSK279-2" is a LI-NING model number, not a brand name
+  {match: 'TK-TTYUL', brand: 'VICTOR'},    // "TK-TTYUL Ultima" is a VICTOR shuttlecock line, not a brand name
+  {match: 'AVSK279-2', brand: 'LI-NING'},  // "AVSK279-2" is a LI-NING model number, not a brand name
+  {match: 'BLACKKNIGHT', brand: 'BlackKnight'}, // merges "blackknight" / "BlackKnight" casing variants into one
+  {match: 'AS-700', brand: 'YONEX'},       // YONEX shuttlecock model
+  {match: 'AS-600', brand: 'YONEX'},       // YONEX shuttlecock model
+  {match: 'BR5233TTY', brand: 'VICTOR'},
+  {match: 'BR5833TTY', brand: 'VICTOR'},
+  {match: 'BAG2401W', brand: 'YONEX'},
+  {match: 'LI-NING', brand: 'LI-NING'},    // catches malformed/garbled names that still contain "LI-NING" somewhere
 ];
 
 function extractBrand(name){
   const trimmed = (name || '').trim();
+  const upper = trimmed.toUpperCase();
   for(const o of BRAND_OVERRIDES){
-    if(trimmed.includes(o.match)) return o.brand;
+    if(upper.includes(o.match.toUpperCase())) return o.brand;
   }
   if(trimmed.includes('張り代')) return 'ガット張り代';
   if(/^FUSION/i.test(trimmed)) return 'FUSION';
-  const first = (trimmed.split('/')[0] || '').trim();
-  if(!first || first === trimmed){
+  // Strip clearance/special-price markers like "(特価)" or a leading "*" so
+  // e.g. "(特価)YONEX/..." groups into "YONEX" instead of its own pseudo-brand.
+  const cleaned = trimmed.replace(/^\(特価\)/, '').replace(/^\*/, '').trim();
+  const first = (cleaned.split('/')[0] || '').trim();
+  if(!first || first === cleaned){
     // No "/" delimiter at all -> this isn't a "BRAND/MODEL/..." formatted product
     // (service fees, misc accessories, etc.) - group these together rather than
     // using each item's own name as a one-off pseudo-brand.
