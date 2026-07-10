@@ -412,6 +412,7 @@
         <div class="chart-card"><h3>来客数</h3><div class="chart-wrap"><canvas id="chartVisitors"></canvas></div></div>
         <div class="chart-card"><h3>客単価</h3><div class="chart-wrap"><canvas id="chartAvg"></canvas></div></div>
         <div class="chart-card wide"><h3>ブランド別売上推移</h3><div class="chart-wrap"><canvas id="chartBrand"></canvas></div></div>
+        <div class="chart-card wide"><h3>カテゴリー別売上推移</h3><div class="chart-wrap"><canvas id="chartCategoryTrend"></canvas></div></div>
       </div>
 
       <div class="section-title"><span class="num">04</span> <span id="topProductsTitle">売れ筋商品（上位15）</span></div>
@@ -1138,6 +1139,7 @@ function clearItemDependentSections(){
   $('#topProductsBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">読み込み中...</td></tr>`;
   $('#brandSummaryBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">読み込み中...</td></tr>`;
   destroyChart('brand');
+  destroyChart('categoryTrend');
 }
 
 async function loadAndRender(focusStore, focusMonth){
@@ -1538,6 +1540,29 @@ function renderCharts(){
   safeChart('brand', 'chartBrand', {
     type:'bar',
     data:{ labels, datasets: brandDatasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Inter', size:11} } } },
+      scales:{
+        x:{ stacked:true, grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
+        y:{ stacked:true, grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} }
+      }
+    }
+  });
+
+  /* category stacked bar: ラケット/シューズ/ウェア/バッグ/シャトル/ガット張り/特価/大会/会費 */
+  const categoryPalette = ['#143C5C','#7C9A11','#B23A2E','#3E7C9A','#C9A227','#6B4FA0','#8892A0','#D48A3A','#4E8C7C'];
+  const monthlyCats = monthRecs.map(m => computeCategoryScore(m.items || []));
+  const categoryDatasets = CATEGORY_DEFS.map((def, i) => ({
+    label: def.label,
+    data: monthlyCats.map(cats => (cats[def.key] ? cats[def.key].amount : 0)),
+    backgroundColor: categoryPalette[i % categoryPalette.length],
+    stack: 'category'
+  }));
+
+  safeChart('categoryTrend', 'chartCategoryTrend', {
+    type:'bar',
+    data:{ labels, datasets: categoryDatasets },
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Inter', size:11} } } },
