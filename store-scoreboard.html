@@ -410,9 +410,13 @@
         <div class="chart-card"><h3>売上合計金額</h3><div class="chart-wrap"><canvas id="chartSales"></canvas></div></div>
         <div class="chart-card"><h3>粗利 / 粗利率</h3><div class="chart-wrap"><canvas id="chartProfit"></canvas></div></div>
         <div class="chart-card"><h3>来客数</h3><div class="chart-wrap"><canvas id="chartVisitors"></canvas></div></div>
-        <div class="chart-card"><h3>客単価</h3><div class="chart-wrap"><canvas id="chartAvg"></canvas></div></div>
-        <div class="chart-card wide"><h3>ブランド別売上推移</h3><div class="chart-wrap"><canvas id="chartBrand"></canvas></div></div>
-        <div class="chart-card wide"><h3>カテゴリー別売上推移</h3><div class="chart-wrap"><canvas id="chartCategoryTrend"></canvas></div></div>
+        <div class="chart-card wide"><h3>ブランド別売上推移（LI-NING / YONEX）</h3><div class="chart-wrap"><canvas id="chartBrand"></canvas></div></div>
+        <div class="chart-card"><h3>ラケット 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatRacket"></canvas></div></div>
+        <div class="chart-card"><h3>シューズ 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatShoes"></canvas></div></div>
+        <div class="chart-card"><h3>ウェア 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatWear"></canvas></div></div>
+        <div class="chart-card"><h3>バッグ 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatBag"></canvas></div></div>
+        <div class="chart-card"><h3>シャトル 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatShuttle"></canvas></div></div>
+        <div class="chart-card"><h3>ガット張り 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatGutString"></canvas></div></div>
       </div>
 
       <div class="section-title"><span class="num">04</span> <span id="topProductsTitle">売れ筋商品（上位15）</span></div>
@@ -1139,7 +1143,7 @@ function clearItemDependentSections(){
   $('#topProductsBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">読み込み中...</td></tr>`;
   $('#brandSummaryBody').innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--grey);">読み込み中...</td></tr>`;
   destroyChart('brand');
-  destroyChart('categoryTrend');
+  ['catRacket','catShoes','catWear','catBag','catShuttle','catGutString'].forEach(destroyChart);
 }
 
 async function loadAndRender(focusStore, focusMonth){
@@ -1474,7 +1478,6 @@ function renderCharts(){
   const profit = monthRecs.map(m => m.nhb.grossProfit);
   const margin = monthRecs.map(m => m.nhb.grossMargin);
   const visitors = monthRecs.map(m => m.nhb.visitors);
-  const avgTicket = monthRecs.map(m => m.nhb.visitors ? m.nhb.salesAmount / m.nhb.visitors : 0);
 
   safeChart('sales', 'chartSales', {
     type:'bar',
@@ -1504,73 +1507,67 @@ function renderCharts(){
     options: baseLineOptions()
   });
 
-  safeChart('avg', 'chartAvg', {
+  /* brand line chart: LI-NING and YONEX only */
+  const brandLineDefs = [
+    {name:'LI-NING', color:'#B23A2E'},
+    {name:'YONEX', color:'#143C5C'},
+  ];
+  const brandDatasets = brandLineDefs.map(b => ({
+    label: b.name,
+    data: monthRecs.map(m => (m.brandSummary && m.brandSummary[b.name]) ? m.brandSummary[b.name].amount : 0),
+    borderColor: b.color,
+    backgroundColor: b.color,
+    tension:.3,
+    fill:false
+  }));
+
+  safeChart('brand', 'chartBrand', {
     type:'line',
-    data:{ labels, datasets:[{ label:'客単価', data: avgTicket, borderColor:'#7C9A11', backgroundColor:'#7C9A11', tension:.3, fill:false }] },
+    data:{ labels, datasets: brandDatasets },
     options: baseLineOptions()
   });
 
-  /* brand stacked bar: top 5 brands overall (this store) + その他 */
-  const totals = {};
-  monthRecs.forEach(m => {
-    Object.entries(m.brandSummary || {}).forEach(([b,v]) => {
-      totals[b] = (totals[b]||0) + v.amount;
-    });
-  });
-  const topBrands = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>x[0]);
-  const palette = ['#143C5C','#7C9A11','#B23A2E','#8892A0','#3E7C9A','#C9A227'];
-  const brandDatasets = topBrands.map((b,i) => ({
-    label: b,
-    data: monthRecs.map(m => (m.brandSummary && m.brandSummary[b]) ? m.brandSummary[b].amount : 0),
-    backgroundColor: palette[i % palette.length],
-    stack:'brand'
-  }));
-  brandDatasets.push({
-    label:'その他',
-    data: monthRecs.map(m => {
-      const bs = m.brandSummary || {};
-      const topSum = topBrands.reduce((s,b)=> s + (bs[b]?bs[b].amount:0), 0);
-      const all = Object.values(bs).reduce((s,v)=> s+v.amount, 0);
-      return all - topSum;
-    }),
-    backgroundColor:'#D8DEE2',
-    stack:'brand'
-  });
-
-  safeChart('brand', 'chartBrand', {
-    type:'bar',
-    data:{ labels, datasets: brandDatasets },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Inter', size:11} } } },
-      scales:{
-        x:{ stacked:true, grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
-        y:{ stacked:true, grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} }
-      }
-    }
-  });
-
-  /* category stacked bar: ラケット/シューズ/ウェア/バッグ/シャトル/ガット張り/特価/大会/会費 */
-  const categoryPalette = ['#143C5C','#7C9A11','#B23A2E','#3E7C9A','#C9A227','#6B4FA0','#8892A0','#D48A3A','#4E8C7C'];
+  /* per-category quantity trend, broken down by brand, one line chart per category */
   const monthlyCats = monthRecs.map(m => computeCategoryScore(m.items || []));
-  const categoryDatasets = CATEGORY_DEFS.map((def, i) => ({
-    label: def.label,
-    data: monthlyCats.map(cats => (cats[def.key] ? cats[def.key].amount : 0)),
-    backgroundColor: categoryPalette[i % categoryPalette.length],
-    stack: 'category'
-  }));
+  const brandLinePalette = ['#143C5C','#7C9A11','#B23A2E','#3E7C9A','#C9A227','#6B4FA0','#8892A0','#D48A3A'];
+  const perCategoryCharts = [
+    {key:'racket', chartKey:'catRacket', canvasId:'chartCatRacket'},
+    {key:'shoes', chartKey:'catShoes', canvasId:'chartCatShoes'},
+    {key:'wear', chartKey:'catWear', canvasId:'chartCatWear'},
+    {key:'bag', chartKey:'catBag', canvasId:'chartCatBag'},
+    {key:'shuttle', chartKey:'catShuttle', canvasId:'chartCatShuttle'},
+    {key:'gutString', chartKey:'catGutString', canvasId:'chartCatGutString'},
+  ];
 
-  safeChart('categoryTrend', 'chartCategoryTrend', {
-    type:'bar',
-    data:{ labels, datasets: categoryDatasets },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ position:'bottom', labels:{ font:{family:'Inter', size:11} } } },
-      scales:{
-        x:{ stacked:true, grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
-        y:{ stacked:true, grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} }
-      }
-    }
+  perCategoryCharts.forEach(({key, chartKey, canvasId}) => {
+    // Find the brands that actually appear for this category across the store's history.
+    const brandTotals = {};
+    monthlyCats.forEach(cats => {
+      const c = cats[key];
+      if(!c) return;
+      Object.entries(c.brands || {}).forEach(([b,v]) => {
+        brandTotals[b] = (brandTotals[b]||0) + v.qty;
+      });
+    });
+    const topCatBrands = Object.entries(brandTotals).sort((a,b)=> b[1]-a[1]).slice(0,8).map(x=>x[0]);
+
+    const datasets = topCatBrands.map((b,i) => ({
+      label: b,
+      data: monthlyCats.map(cats => {
+        const c = cats[key];
+        return (c && c.brands[b]) ? c.brands[b].qty : 0;
+      }),
+      borderColor: brandLinePalette[i % brandLinePalette.length],
+      backgroundColor: brandLinePalette[i % brandLinePalette.length],
+      tension:.3,
+      fill:false
+    }));
+
+    safeChart(chartKey, canvasId, {
+      type:'line',
+      data:{ labels, datasets },
+      options: baseLineOptions()
+    });
   });
 }
 
