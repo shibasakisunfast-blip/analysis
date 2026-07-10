@@ -1060,9 +1060,9 @@ $('#importInput').addEventListener('change', async (e) => {
       importedAt: new Date().toISOString(),
       nhb: nhb || existing.nhb,
       items: ui ? ui.items : (existing ? existing.items : []),
-      brandSummary: ui ? ui.brandSummary : (existing ? existing.brandSummary : {}),
       stock: ui ? ui.stock : (existing ? existing.stock : {}),
     };
+    record.brandSummary = computeBrandSummary(record.items);
 
     showToast('スプレッドシートに保存中...');
     await apiUpsert(record);
@@ -1076,7 +1076,12 @@ $('#importInput').addEventListener('change', async (e) => {
       showToast(`${selectedStore} ${yearMonth} の商品明細を更新しました`);
     }
 
-    await loadAndRender(selectedStore, record.yearMonth);
+    // Update the screen from the record we just saved rather than re-fetching
+    // summaries from the server: the save already succeeded, and a flaky
+    // follow-up read shouldn't be the only thing standing between "saved" and
+    // "visible on screen".
+    applyLocalRecordUpdate(record);
+    await renderAll(selectedStore, record.yearMonth);
   }catch(err){
     console.error(err);
     showToast('読み込みに失敗しました: ' + err.message);
@@ -1136,9 +1141,11 @@ $('#restoreInput').addEventListener('change', async (e) => {
       showToast(`復元中... (${count}/${data.length})`);
       await apiUpsert(rec);
       itemsCache[rec.store + '::' + rec.yearMonth] = rec.items || [];
+      rec.brandSummary = computeBrandSummary(rec.items || []);
+      applyLocalRecordUpdate(rec);
     }
     showToast(count + ' 件のデータをスプレッドシートに復元しました');
-    await loadAndRender();
+    await renderAll();
   }catch(err){
     console.error(err);
     showToast('復元に失敗しました: ' + err.message);
@@ -1154,7 +1161,8 @@ async function handleDelete(id, store, ym){
     await apiDelete(store, ym);
     delete itemsCache[store + '::' + ym];
     showToast(`${store} ${ym} を削除しました`);
-    await loadAndRender(store);
+    removeLocalRecord(store, ym);
+    await renderAll(store);
   }catch(err){
     console.error(err);
     showToast('削除に失敗しました: ' + err.message);
@@ -1189,6 +1197,16 @@ async function loadAndRender(focusStore, focusMonth){
     $('#storeArea').style.display = 'none';
     return;
   }
+  await renderAll(focusStore, focusMonth);
+}
+
+// Renders everything from whatever is currently in allRecords/summaryRecords,
+// without talking to the server. Used both after a fresh summaries fetch
+// (loadAndRender above) and right after a successful save/delete, where we
+// already know the new state locally and don't want a flaky follow-up
+// network request to be the only thing standing between "saved successfully"
+// and "the screen actually shows it".
+async function renderAll(focusStore, focusMonth){
   $('#setupState').style.display = 'none';
 
   if(allRecords.length === 0){
@@ -1251,6 +1269,23 @@ async function loadAndRender(focusStore, focusMonth){
   renderManageList();
 }
 
+// Inserts/updates one record directly in the local allRecords/summaryRecords
+// state (used right after a successful save), so the screen can refresh from
+// data we already have instead of depending on another network round trip.
+function applyLocalRecordUpdate(record){
+  const idx = allRecords.findIndex(r => r.id === record.id);
+  if(idx >= 0) allRecords[idx] = record; else allRecords.push(record);
+  allRecords.sort((a,b)=> a.yearMonth.localeCompare(b.yearMonth));
+
+  const sIdx = summaryRecords.findIndex(s => s.store === record.store && s.yearMonth === record.yearMonth);
+  if(sIdx < 0) summaryRecords.push({store: record.store, yearMonth: record.yearMonth});
+}
+
+function removeLocalRecord(store, yearMonth){
+  allRecords = allRecords.filter(r => !(r.store === store && r.yearMonth === yearMonth));
+  summaryRecords = summaryRecords.filter(s => !(s.store === store && s.yearMonth === yearMonth));
+}
+
 function renderStoreTabs(){
   const wrap = $('#storeTabs');
   wrap.innerHTML = '';
@@ -1260,7 +1295,7 @@ function renderStoreTabs(){
     btn.className = 'store-tab' + (store === selectedStore ? ' active' : '');
     if(store === selectedStore){ btn.style.background = STORE_COLORS[store]; }
     btn.innerHTML = `<span class="dot" style="background:${STORE_COLORS[store]}"></span>${store}${has ? '' : '<span style="color:var(--grey); font-weight:400; font-size:11px;">（未取込）</span>'}`;
-    btn.addEventListener('click', () => loadAndRender(store));
+    btn.addEventListener('click', () => renderAll(store));
     wrap.appendChild(btn);
   });
 }
