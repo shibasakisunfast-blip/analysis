@@ -408,7 +408,8 @@
       <div class="section-title"><span class="num">03</span> <span id="trendsTitle">推移</span></div>
       <div class="chart-grid">
         <div class="chart-card"><h3>売上合計金額</h3><div class="chart-wrap"><canvas id="chartSales"></canvas></div></div>
-        <div class="chart-card"><h3>粗利 / 粗利率</h3><div class="chart-wrap"><canvas id="chartProfit"></canvas></div></div>
+        <div class="chart-card"><h3>粗利</h3><div class="chart-wrap"><canvas id="chartProfit"></canvas></div></div>
+        <div class="chart-card"><h3>粗利率</h3><div class="chart-wrap"><canvas id="chartMargin"></canvas></div></div>
         <div class="chart-card"><h3>来客数</h3><div class="chart-wrap"><canvas id="chartVisitors"></canvas></div></div>
         <div class="chart-card wide"><h3>ブランド別売上推移（LI-NING / YONEX）</h3><div class="chart-wrap"><canvas id="chartBrand"></canvas></div></div>
         <div class="chart-card"><h3>ラケット 数量推移（ブランド別）</h3><div class="chart-wrap"><canvas id="chartCatRacket"></canvas></div></div>
@@ -616,8 +617,20 @@ function parseNHBRows(rows){
   };
 }
 
+// Some products aren't entered in the store's POS as "BRAND/MODEL/..." - the
+// name starts directly with a model/series name instead, so the generic
+// first-segment split picks up the wrong (or overly specific) "brand". Known
+// cases get corrected here; add more entries as they turn up.
+const BRAND_OVERRIDES = [
+  {match: 'TK-TTYUL', brand: 'VICTOR'},   // "TK-TTYUL Ultima" is a VICTOR shuttlecock line, not a brand name
+  {match: 'AVSK279-2', brand: 'LI-NING'}, // "AVSK279-2" is a LI-NING model number, not a brand name
+];
+
 function extractBrand(name){
   const trimmed = (name || '').trim();
+  for(const o of BRAND_OVERRIDES){
+    if(trimmed.includes(o.match)) return o.brand;
+  }
   if(trimmed.includes('張り代')) return 'ガット張り代';
   if(/^FUSION/i.test(trimmed)) return 'FUSION';
   const first = (trimmed.split('/')[0] || '').trim();
@@ -1486,19 +1499,15 @@ function renderCharts(){
   });
 
   safeChart('profit', 'chartProfit', {
-    data:{ labels, datasets:[
-      { type:'bar', label:'粗利（円）', data: profit, backgroundColor:'#7C9A11', borderRadius:4, yAxisID:'y' },
-      { type:'line', label:'粗利率（%）', data: margin, borderColor:'#B23A2E', backgroundColor:'#B23A2E', yAxisID:'y1', tension:.3 }
-    ]},
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ labels:{ font:{family:'Inter', size:11} } } },
-      scales:{
-        x:{ grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} },
-        y:{ position:'left', grid:{color:'#EDF0EC'}, ticks:{font:{family:'Roboto Mono', size:10}} },
-        y1:{ position:'right', grid:{display:false}, ticks:{font:{family:'Roboto Mono', size:10}} }
-      }
-    }
+    type:'bar',
+    data:{ labels, datasets:[{ label:'粗利（円）', data: profit, backgroundColor:'#7C9A11', borderRadius:4 }] },
+    options: baseLineOptions()
+  });
+
+  safeChart('margin', 'chartMargin', {
+    type:'line',
+    data:{ labels, datasets:[{ label:'粗利率（%）', data: margin, borderColor:'#B23A2E', backgroundColor:'#B23A2E', tension:.3, fill:false }] },
+    options: baseLineOptions()
   });
 
   safeChart('visitors', 'chartVisitors', {
