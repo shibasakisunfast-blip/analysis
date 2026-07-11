@@ -363,9 +363,6 @@
     </div>
     <div class="top-actions">
       <button class="btn btn-ghost" id="btnSettings">⚙ 接続設定</button>
-      <button class="btn btn-ghost" id="btnBackup">バックアップ保存</button>
-      <button class="btn btn-ghost" id="btnRestoreTrigger">復元</button>
-      <input type="file" id="restoreInput" accept="application/json">
       <input type="text" id="manualYearMonth" class="text-input" placeholder="対象年月 例:2026-07" style="width:150px;" title="空欄なら来客数集計CSVの年月を自動で使用します。入力すると、その年月として保存/上書きします。">
       <button class="btn btn-primary" id="btnImportTrigger">＋ データを追加</button>
       <input type="file" id="importInput" accept=".csv" multiple>
@@ -500,10 +497,7 @@
     <div class="section-title"><span class="num">08</span> 取込データの管理</div>
     <div class="table-card">
       <div id="manageList"></div>
-      <div class="footer-actions">
-        <button class="btn btn-ghost" style="color:var(--court-blue); border-color:var(--line);" id="btnBackup2">全データをバックアップ（JSON）</button>
-      </div>
-      <p class="status-line">データはこのブラウザ内（IndexedDB）に、店舗ごと・月ごとに保存されます。別のパソコンやブラウザでも使う場合は、バックアップJSONを書き出して復元してください。</p>
+      <p class="status-line">データはGoogleスプレッドシートに保存されます。接続設定さえ同じにすれば、他のパソコンやスマホからも同じデータを見られます。</p>
     </div>
 
   </div>
@@ -521,7 +515,7 @@
 <script>
 /* =========================================================
    店舗成績スコアボード（複数店舗対応）
-   - CSV(Shift_JIS) を読み込み IndexedDB に「店舗×月」で保存
+   - CSV(Shift_JIS) を読み込み Googleスプレッドシートに「店舗×月」で保存
    - NHB: 年月,来客数,販売数,売上合計金額,粗利,粗利率,仕入数,仕入金額
    - UI : 処理内容,仕入先,仕入先名,商品コード,商品名,ＪＡＮ,型番１,数量,単価,合計金額
    ========================================================= */
@@ -1085,70 +1079,6 @@ $('#importInput').addEventListener('change', async (e) => {
   }catch(err){
     console.error(err);
     showToast('読み込みに失敗しました: ' + err.message);
-  }
-  e.target.value = '';
-});
-
-/* ---------- Backup / Restore ---------- */
-async function doBackup(){
-  try{
-    showToast('バックアップの準備中...（全店舗の商品明細を確認しています）');
-    const allKeys = allRecords.map(r => r.store + '::' + r.yearMonth);
-    const fetchedNew = await ensureItemsLoaded(allKeys);
-    if(fetchedNew) refreshItemsOnRecords();
-  }catch(err){
-    console.error(err);
-    showToast('一部データの取得に失敗しました。バックアップが不完全な可能性があります: ' + err.message);
-  }
-  const blob = new Blob([JSON.stringify(allRecords, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const stamp = new Date().toISOString().slice(0,10);
-  a.href = url; a.download = `store-scoreboard-backup-${stamp}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('バックアップを書き出しました');
-}
-$('#btnBackup').addEventListener('click', doBackup);
-$('#btnBackup2').addEventListener('click', doBackup);
-
-function promptForLegacyStore(){
-  const msg = '店舗名の記録がない古い形式のバックアップです。どの店舗のデータとして復元しますか？\n' +
-    STORES.map((s,i)=> `${i+1}: ${s}`).join('\n');
-  const ans = prompt(msg, '1');
-  const idx = parseInt(ans, 10) - 1;
-  return STORES[idx] || STORES[0];
-}
-
-$('#btnRestoreTrigger').addEventListener('click', () => $('#restoreInput').click());
-$('#restoreInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if(!file) return;
-  try{
-    const text = await file.text();
-    const data = JSON.parse(text);
-    if(!Array.isArray(data)) throw new Error('形式が不正です');
-    let legacyStore = null;
-    let count = 0;
-    for(const rec of data){
-      if(!rec.yearMonth) continue;
-      if(!rec.store){
-        if(!legacyStore) legacyStore = promptForLegacyStore();
-        rec.store = legacyStore;
-      }
-      rec.id = recordId(rec.store, rec.yearMonth);
-      count++;
-      showToast(`復元中... (${count}/${data.length})`);
-      await apiUpsert(rec);
-      itemsCache[rec.store + '::' + rec.yearMonth] = rec.items || [];
-      rec.brandSummary = computeBrandSummary(rec.items || []);
-      applyLocalRecordUpdate(rec);
-    }
-    showToast(count + ' 件のデータをスプレッドシートに復元しました');
-    await renderAll();
-  }catch(err){
-    console.error(err);
-    showToast('復元に失敗しました: ' + err.message);
   }
   e.target.value = '';
 });
