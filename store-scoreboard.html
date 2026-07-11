@@ -531,6 +531,26 @@ const STORE_COLORS = {
   '鴫野店':'#6B4FA0',
 };
 
+/* ---------- Brand colors (consistent everywhere: charts, tables, etc.) ---------- */
+const BRAND_COLOR_PALETTE = ['#143C5C','#7C9A11','#B23A2E','#3E7C9A','#C9A227','#6B4FA0','#8892A0','#D48A3A','#4E8C7C','#A0522D'];
+// Pin the most common brands to specific, memorable colors.
+const BRAND_COLOR_FIXED = {
+  'YONEX': '#143C5C',
+  'LI-NING': '#B23A2E',
+  'VICTOR': '#3E7C9A',
+  'GOSEN': '#7C9A11',
+  'SUNFAST': '#C9A227',
+};
+function getBrandColor(brand){
+  if(BRAND_COLOR_FIXED[brand]) return BRAND_COLOR_FIXED[brand];
+  // Any other brand still gets a stable color: a deterministic hash of the
+  // name picks a palette slot, so it's the same color in every chart/table
+  // without needing to share state across independent render calls.
+  let hash = 0;
+  for(let i=0; i<brand.length; i++){ hash = (hash*31 + brand.charCodeAt(i)) >>> 0; }
+  return BRAND_COLOR_PALETTE[hash % BRAND_COLOR_PALETTE.length];
+}
+
 /* ---------- Utilities ---------- */
 const $ = (sel) => document.querySelector(sel);
 const fmt = (n, digits=0) => (n===null||n===undefined||isNaN(n)) ? '–' : Number(n).toLocaleString('ja-JP', {maximumFractionDigits:digits, minimumFractionDigits:digits});
@@ -1494,15 +1514,11 @@ function renderCharts(){
   });
 
   /* brand line chart: LI-NING and YONEX only */
-  const brandLineDefs = [
-    {name:'LI-NING', color:'#B23A2E'},
-    {name:'YONEX', color:'#143C5C'},
-  ];
-  const brandDatasets = brandLineDefs.map(b => ({
-    label: b.name,
-    data: monthRecs.map(m => (m.brandSummary && m.brandSummary[b.name]) ? m.brandSummary[b.name].amount : 0),
-    borderColor: b.color,
-    backgroundColor: b.color,
+  const brandDatasets = ['LI-NING','YONEX'].map(name => ({
+    label: name,
+    data: monthRecs.map(m => (m.brandSummary && m.brandSummary[name]) ? m.brandSummary[name].amount : 0),
+    borderColor: getBrandColor(name),
+    backgroundColor: getBrandColor(name),
     tension:.3,
     fill:false
   }));
@@ -1515,7 +1531,6 @@ function renderCharts(){
 
   /* per-category quantity trend, broken down by brand, one line chart per category */
   const monthlyCats = monthRecs.map(m => computeCategoryScore(m.items || []));
-  const brandLinePalette = ['#143C5C','#7C9A11','#B23A2E','#3E7C9A','#C9A227','#6B4FA0','#8892A0','#D48A3A'];
   const perCategoryCharts = [
     {key:'racket', chartKey:'catRacket', canvasId:'chartCatRacket'},
     {key:'shoes', chartKey:'catShoes', canvasId:'chartCatShoes'},
@@ -1537,14 +1552,14 @@ function renderCharts(){
     });
     const topCatBrands = Object.entries(brandTotals).sort((a,b)=> b[1]-a[1]).slice(0,8).map(x=>x[0]);
 
-    const datasets = topCatBrands.map((b,i) => ({
+    const datasets = topCatBrands.map(b => ({
       label: b,
       data: monthlyCats.map(cats => {
         const c = cats[key];
         return (c && c.brands[b]) ? c.brands[b].qty : 0;
       }),
-      borderColor: brandLinePalette[i % brandLinePalette.length],
-      backgroundColor: brandLinePalette[i % brandLinePalette.length],
+      borderColor: getBrandColor(b),
+      backgroundColor: getBrandColor(b),
       tension:.3,
       fill:false
     }));
