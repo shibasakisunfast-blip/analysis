@@ -478,6 +478,7 @@
       <p class="status-line" id="periodEmptyNote" style="display:none;">選択した期間・店舗のデータがありません。</p>
     </div>
     <div class="chart-card wide" style="margin-top:16px;"><h3 style="font-family:'Oswald',sans-serif; font-size:14px; text-transform:uppercase; margin:0 0 10px;">期間中の売上推移</h3><div class="chart-wrap" style="height:260px;"><canvas id="chartPeriodTrend"></canvas></div></div>
+    <div class="chart-card wide" style="margin-top:16px;"><h3 style="font-family:'Oswald',sans-serif; font-size:14px; text-transform:uppercase; margin:0 0 10px;">期間中の粗利推移</h3><div class="chart-wrap" style="height:260px;"><canvas id="chartPeriodProfitTrend"></canvas></div></div>
 
     <div class="section-title"><span id="periodCategoryCompareTitle">期間のカテゴリー別比較</span></div>
     <div class="table-card">
@@ -1819,6 +1820,21 @@ async function renderPeriodAnalysis(){
   safeChart('periodTrend', 'chartPeriodTrend', {
     type:'line',
     data:{ labels: trendLabels, datasets: trendDatasets },
+    options: baseLineOptions()
+  });
+
+  const profitTrendDatasets = storesToShow.map(store => ({
+    label: store,
+    data: trendLabels.map(ym => { const r = getRecord(store, ym); return r ? r.nhb.grossProfit : null; }),
+    borderColor: STORE_COLORS[store],
+    backgroundColor: STORE_COLORS[store],
+    spanGaps: true,
+    tension:.3,
+    fill:false
+  }));
+  safeChart('periodProfitTrend', 'chartPeriodProfitTrend', {
+    type:'line',
+    data:{ labels: trendLabels, datasets: profitTrendDatasets },
     options: baseLineOptions()
   });
 
